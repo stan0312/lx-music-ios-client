@@ -334,8 +334,8 @@ extension UIImage {
             image.draw(in: CGRect(origin: .zero, size: size))
         }
         guard let cg = color.cgImage, let provider = cg.dataProvider,
-              let data = provider.data else { return nil }
-        let bytes = [UInt8](data)
+              let cf = provider.data else { return nil }
+        let bytes = [UInt8](cf as Data)
         guard bytes.count >= 4 else { return nil }
         return UIColor(red: CGFloat(bytes[0]) / 255, green: CGFloat(bytes[1]) / 255,
                        blue: CGFloat(bytes[2]) / 255, alpha: 1)
