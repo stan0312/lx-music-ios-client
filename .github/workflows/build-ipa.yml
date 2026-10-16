@@ -28,20 +28,14 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 安装 XcodeGen
-        run: brew install xcodegen
-
-      - name: 生成 Xcode 工程
-        run: xcodegen generate
-
-      - name: 编译（未签名，arm64）
+      - name: 编译（未签名，arm64，使用随仓库的 objectVersion=56 工程）
         run: |
           xcodebuild \
             -project LXMusicClient.xcodeproj \
-            -scheme LXMusicClient \
+            -target LXMusicClient \
             -configuration Release \
             -sdk iphoneos \
-            -derivedDataPath Build \
+            SYMROOT="$(pwd)/build" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
@@ -49,12 +43,13 @@ jobs:
 
       - name: 打包 .ipa
         run: |
-          APP_PATH="Build/Build/Products/Release-iphoneos/LXMusicClient.app"
-          if [ ! -d "$APP_PATH" ]; then
-            echo "未找到产物：$APP_PATH"
-            ls -R Build/Build/Products/Release-iphoneos || true
+          APP_PATH=$(find "$(pwd)/build" -type d -name "LXMusicClient.app" | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "未找到产物：LXMusicClient.app"
+            find "$(pwd)/build" -maxdepth 4 -type d || true
             exit 1
           fi
+          echo "产物路径：$APP_PATH"
           rm -rf Payload
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
