@@ -1,0 +1,38 @@
+# LX Music iOS 客户端 — XcodeGen 工程定义
+# 生成：xcodegen generate
+name: LXMusicClient
+options:
+  bundleIdPrefix: com.lxmusic
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+  developmentLanguage: zh-Hans
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    TARGETED_DEVICE_FAMILY: "1"
+    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""
+    INFOPLIST_KEY_CFBundleDisplayName: "LX 音乐"
+targets:
+  LXMusicClient:
+    type: application
+    platform: iOS
+    sources:
+      - path: LXMusicClient
+    info:
+      path: LXMusicClient/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lxmusic.client
+        PRODUCT_NAME: LXMusicClient
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGNING_ALLOWED: NO
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        DEVELOPMENT_ASSET_PATHS: ""

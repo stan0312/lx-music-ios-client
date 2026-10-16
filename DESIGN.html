@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LX 音乐 iOS 客户端 · 设计文档</title>
+<style>
+  :root{--accent:#1a73e8;--bg:#f6f8fb;--card:#fff;--ink:#1c1e21;--muted:#6b7280}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);line-height:1.6}
+  .wrap{max-width:960px;margin:0 auto;padding:32px 20px 60px}
+  h1{font-size:26px;margin:0 0 4px}
+  .sub{color:var(--muted);margin-bottom:26px}
+  h2{font-size:18px;margin:30px 0 12px;border-left:4px solid var(--accent);padding-left:10px}
+  .card{background:var(--card);border-radius:14px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.04);margin-bottom:18px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid #eef0f3}
+  th{color:var(--muted);font-weight:600;background:#fafbfc}
+  .ok{color:#0a7d43;font-weight:600}
+  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:12px;background:#e7f2ff;color:var(--accent)}
+  .layers{display:flex;flex-direction:column;gap:8px}
+  .layer{border:1px solid #e3e8f0;border-radius:10px;padding:10px 14px;background:#fff;font-size:13px}
+  .layer b{color:var(--accent)}
+  .layer .tags{margin-top:4px;font-size:12px;color:var(--muted)}
+  .flow{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .node{background:#f1f5fb;border:1px solid #dce6f5;color:#1a3a6b;border-radius:8px;padding:6px 12px;font-size:12px}
+  .arrow{color:#b9c3d1;font-weight:700;align-self:center}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+  .feat{border:1px solid #e8edf4;border-radius:10px;padding:12px}
+  .feat b{display:block;margin-bottom:4px;font-size:14px}
+  .feat span{font-size:12px;color:var(--muted)}
+  .muted{color:var(--muted)}
+  @media(max-width:640px){.wrap{padding:20px 12px 50px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>LX 音乐 iOS 客户端</h1>
+  <div class="sub">基于 <b>lxserver</b>（LX Music Sync Server）的原生 SwiftUI 客户端 · 界面参考汽水音乐</div>
+
+  <div class="card">
+    <h2 style="margin-top:0">App 分层架构</h2>
+    <div class="layers">
+      <div class="layer"><b>视图层 Views（SwiftUI）</b>
+        <div class="tags">RootView(Tab) · 推荐/歌单/我的 · 搜索 · 全屏播放器 · 迷你播放条 · 缓存/设置/备份</div>
+      </div>
+      <div class="layer"><b>状态层 Stores / Player</b>
+        <div class="tags">AppSession（连接/登录/外观） · PlayerManager（AVPlayer 队列/歌词/倍速/音质） · ServerConfig 持久化</div>
+      </div>
+      <div class="layer"><b>网络层 Networking · LXAPIClient</b>
+        <div class="tags">REST API 全接口封装（JSON + x-user-token + 播放器会话 Cookie）· 容错解码多平台返回</div>
+      </div>
+      <div class="layer"><b>数据模型 Models</b>
+        <div class="tags">Song · SongList · Artist · Album · Cache · UserList · LyricLine · Comment</div>
+      </div>
+      <div class="layer"><b>服务端 lxserver（Express + WebSocket）</b>
+        <div class="tags">聚合搜索 · 歌单/榜单 · 播放直链 · 歌词/评论 · 缓存 · 用户同步 · WebDAV · Subsonic</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">主要页面流转</h2>
+    <div class="flow">
+      <div class="node">服务器连接 / 登录</div><div class="arrow">→</div>
+      <div class="node">底部三 Tab</div><div class="arrow">→</div>
+      <div class="node">播放列表（任意）</div><div class="arrow">→</div>
+      <div class="node">全屏播放器</div><div class="arrow">→</div>
+      <div class="node">队列 / 评论 / 下载</div>
+    </div>
+    <div class="flow">
+      <div class="node">推荐：热搜 + 排行榜</div>
+      <div class="node">歌单：广场标签 → 歌单详情</div>
+      <div class="node">搜索：联想/热搜/多源结果</div>
+      <div class="node">我的：同步歌单 / 缓存 / 备份 / 设置</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">功能覆盖（对照 lxserver Web 端）</h2>
+    <table>
+      <thead><tr><th>分类</th><th>功能</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>连接</td><td>服务器地址 / 播放器密码 / 用户账号登录（x-user-token）</td><td class="ok">✅ 已实现</td></tr>
+        <tr><td>发现</td><td>多源聚合搜索 + 联想提示 + 热门搜索</td><td class="ok">✅ 已实现</td></tr>
+        <tr><td>歌单</td><td>歌单广场（分类标签）、歌单详情、多平台排行榜</td><td class="ok">✅ 已实现</td></tr>
+        <tr><td>播放</td><td>全屏播放页、滚动歌词、倍速、进度、后台播放</td><td class="ok">✅ 已实现</td></tr>
+        <tr><td>音质</td><td>标准/高品质/无损/Hi-Res/母带</td><td class="ok">✅ 已实现</td></tr>
+        <tr><td>我的</td><td>同步歌单与收藏、增删歌曲、缓存管理、快照备份</td><td class="ok">✅ 已实现</td></tr>
+        <tr><td>下载</td><td>服务器代理下载（自动注入 ID3）</td><td class="ok">✅ 已实现</td></tr>
+        <tr><td>评论</td><td>歌曲评论（hot/new）</td><td class="ok">✅ 已实现</td></tr>
+        <tr><td>设置</td><td>默认音质、深色模式、服务器信息</td><td class="ok">✅ 已实现</td></tr>
+        <tr><td>管理后台</td><td>/admin 用户/全局配置（服务器运维范畴）</td><td class="muted">— 未纳入客户端</td></tr>
+        <tr><td>Subsonic</td><td>供音流/Feishin 等第三方客户端接入</td><td class="muted">— 服务端能力</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">关键设计决策</h2>
+    <div class="grid">
+      <div class="feat"><b>认证双通道</b><span>播放器密码（Cookie 会话）+ 用户账号（x-user-token），游客可浏览、登录后可同步。</span></div>
+      <div class="feat"><b>容错解码</b><span>多平台返回结构不一致，模型层多路径提取歌曲/封面/列表，稳定兼容。</span></div>
+      <div class="feat"><b>ATS 放行</b><span>允许 http，适配局域网内网 lxserver 部署与 http 音频流。</span></div>
+      <div class="feat"><b>后台播放</b><span>AVAudioSession .playback + 锁屏远程控制 + NowPlaying 信息。</span></div>
+      <div class="feat"><b>CI 产 IPA</b><span>GitHub Actions 在 macOS runner 编译打包 .ipa，TrollStore 可直接安装。</span></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

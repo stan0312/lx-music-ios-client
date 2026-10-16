@@ -1,0 +1,103 @@
+# LX Music iOS 客户端自动构建
+# - push 到 main 或手动触发时，在 macOS runner 上编译并打包 .ipa
+# - 产物以 GitHub Actions Artifact 交付（同时会在“Actions”页面可下载）
+# - 手动触发（workflow_dispatch）时额外创建一个 GitHub Release 作为备份
+#
+# 说明：
+# 默认构建为「未签名」.ipa，可直接用 TrollStore（巨魔）安装。
+# 若需要签名，请在仓库 Settings -> Secrets 配置：
+#   CERT_BASE64（p12 证书 base64）、CERT_PASSWORD、PROVISIONING_PROFILE_BASE64、
+#   DEVELOPMENT_TEAM，并取消下方对应步骤的注释。
+
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-ipa:
+    name: 构建 IPA
+    runs-on: macos-14
+    concurrency:
+      group: lxmusic-ipa
+      cancel-in-progress: true
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 XcodeGen
+        run: brew install xcodegen
+
+      - name: 生成 Xcode 工程
+        run: xcodegen generate
+
+      - name: 编译（未签名，arm64）
+        run: |
+          xcodebuild \
+            -project LXMusicClient.xcodeproj \
+            -target LXMusicClient \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath Build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: 打包 .ipa
+        run: |
+          APP_PATH="Build/Build/Products/Release-iphoneos/LXMusicClient.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "未找到产物：$APP_PATH"
+            ls -R Build/Build/Products/Release-iphoneos || true
+            exit 1
+          fi
+          rm -rf Payload
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          zip -qr LXMusicClient.ipa Payload
+          echo "=== IPA 已生成 ==="
+          ls -lh LXMusicClient.ipa
+
+      # ---- 可选：签名（需配置 Secrets 后取消注释 ----
+      # - name: 配置签名证书
+      #   if: env.CERT_BASE64 != ''
+      #   env:
+      #     CERT_BASE64: ${{ secrets.CERT_BASE64 }}
+      #     CERT_PASSWORD: ${{ secrets.CERT_PASSWORD }}
+      #     PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+      #     DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+      #   run: |
+      #     echo "$CERT_BASE64" | base64 --decode > /tmp/cert.p12
+      #     mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+      #     echo "$PROVISIONING_PROFILE_BASE64" | base64 --decode > \
+      #       ~/Library/MobileDevice/Provisioning\ Profiles/LX.provisionprofile
+      #     security import /tmp/cert.p12 -k ~/Library/Keychains/login.keychain-db -P "$CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security || true
+      #     xcodebuild -project LXMusicClient.xcodeproj -target LXMusicClient \
+      #       -configuration Release -sdk iphoneos -derivedDataPath Build \
+      #       DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" CODE_SIGN_STYLE=Automatic build
+      # ------------------------------------------------
+
+      - name: 上传 IPA 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: LXMusicClient.ipa
+          path: LXMusicClient.ipa
+          if-no-files-found: error
+
+      # 手动触发时发布 GitHub Release（备用）
+      - name: 创建 GitHub Release
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: LX Music iOS 客户端 v1.0.0 (build ${{ github.run_number }})
+          body: |
+            自动构建产物（未签名 .ipa，可用 TrollStore/巨魔安装）。
+            构建时间：${{ github.event.head_commit.timestamp }}
+          files: LXMusicClient.ipa
+          draft: false
+          prerelease: true

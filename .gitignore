@@ -1,0 +1,16 @@
+# Xcode
+DerivedData/
+build/
+Build/
+*.xcuserstate
+xcuserdata/
+.DS_Store
+
+# 本地签名/证书
+*.p12
+*.mobileprovision
+*.ipa
+
+# 依赖
+Pods/
+node_modules/
