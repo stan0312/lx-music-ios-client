@@ -147,11 +147,10 @@ struct HomeView: View {
     private func load() async {
         isLoading = true
         error = nil
-        async let h = session.api?.hotSearch()
-        async let b = session.api?.leaderboardBoards(platform: platform)
-        let (hs, bs) = await (h, b)
-        hotSearches = hs ?? []
-        boards = bs ?? []
+        let hs = (try? await session.api?.hotSearch()) ?? []
+        let bs = (try? await session.api?.leaderboardBoards(platform: platform)) ?? []
+        hotSearches = hs
+        boards = bs
         isLoading = false
     }
 

@@ -35,7 +35,7 @@ struct SongListPlazaView: View {
         }
         .task {
             if tags.isEmpty {
-                tags = try? await session.api?.songListTags() ?? []
+                tags = (try? await session.api?.songListTags()) ?? []
             }
             await loadLists()
         }
@@ -72,7 +72,7 @@ struct SongListPlazaView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         ZStack(alignment: .bottomLeading) {
                             CoverImage(url: info.cover, width: 170, cornerRadius: 12)
-                            if info.playCount > 0 {
+                            if let pc = info.playCount, pc > 0 {
                                 Text("▶ \(info.playCountText)")
                                     .font(.caption2)
                                     .padding(4)

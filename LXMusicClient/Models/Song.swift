@@ -269,8 +269,9 @@ struct LyricLine: Identifiable, Equatable {
             let nsRange = NSRange(line.startIndex..<line.endIndex, in: line)
             let matches = regex.matches(in: line, options: [], range: nsRange)
             guard !matches.isEmpty else { continue }
-            let text = line.replacingOccurrences(of: regex, with: "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = regex.stringByReplacingMatches(
+                in: line, options: [], range: nsRange, withTemplate: ""
+            ).trimmingCharacters(in: .whitespacesAndNewlines)
             for m in matches {
                 guard let r1 = Range(m.range(at: 1), in: line),
                       let r2 = Range(m.range(at: 2), in: line),
@@ -322,7 +323,7 @@ struct CacheItem: Identifiable, Hashable {
 
 // MARK: - 用户同步列表（LX Music 收藏列表结构）
 
-struct UserList: Identifiable, Hashable, Codable {
+struct UserList: Identifiable, Hashable {
     var id: String
     var name: String
     var songList: [UserListSong]?

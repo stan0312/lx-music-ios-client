@@ -70,24 +70,6 @@ final class LXAPIClient {
         return try JSONSerialization.jsonObject(with: data)
     }
 
-    private func get<T>(_ path: String, query: [String: String] = [:]) async throws -> T {
-        let u = try url(path, query: query)
-        let obj = try await request(u)
-        return try decode(obj)
-    }
-
-    private func post<T>(_ path: String, body: Any? = nil) async throws -> T {
-        let u = try url(path)
-        let obj = try await request(u, method: "POST", body: body)
-        return try decode(obj)
-    }
-
-    private func decode<T>(_ obj: Any) throws -> T {
-        if T.self == Any.self { return obj }
-        let data = try JSONSerialization.data(withJSONObject: obj)
-        return try JSONDecoder().decode(T.self, from: data)
-    }
-
     // MARK: - 认证与配置
 
     /// 公开配置
@@ -236,7 +218,7 @@ final class LXAPIClient {
     func artistDetail(source: String, id: String) async throws -> Artist? {
         let obj: Any = try await request(try url("/api/music/artistDetail",
                                                  query: ["source": source, "id": id]))
-        return (obj as? [String: Any]).flatMap { Artist(json: $0) } ?? (obj as? [Any]).flatMap { $0 as? [String: Any] }.flatMap { Artist(json: $0) }
+        return (obj as? [String: Any]).flatMap { Artist(json: $0) }
     }
 
     func artistAlbums(source: String, id: String, page: Int = 1) async throws -> [Album] {

@@ -43,7 +43,7 @@ final class PlayerManager: ObservableObject {
         try? session.setActive(true)
     }
 
-    func configure(api: LXAPIClient) {
+    func configure(api: LXAPIClient?) {
         self.api = api
     }
 
@@ -113,7 +113,7 @@ final class PlayerManager: ObservableObject {
 
     // MARK: - 加载播放
 
-    private func loadCurrent() {
+    func loadCurrent() {
         guard let song = currentSong else { return }
         playError = nil
         // 清歌词
@@ -159,21 +159,24 @@ final class PlayerManager: ObservableObject {
         let interval = CMTime(seconds: 0.25, preferredTimescale: 600)
         if let old = timeObserver { player.removeTimeObserver(old) }
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
+            guard let self else { return }
+            let s = self
+            let t = time.seconds
             Task { @MainActor in
-                guard let self else { return }
-                let t = time.seconds
-                self.currentTime = t
-                if self.duration == 0, let dur = player.currentItem?.duration.seconds, dur.isFinite, dur > 0 {
-                    self.duration = dur
+                s.currentTime = t
+                if s.duration == 0, let dur = player.currentItem?.duration.seconds, dur.isFinite, dur > 0 {
+                    s.duration = dur
                 }
-                self.updateActiveLyric(at: t)
+                s.updateActiveLyric(at: t)
             }
         }
 
         NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.next() }
+            guard let self else { return }
+            let s = self
+            Task { @MainActor in s.next() }
         }
 
         configureRemoteCommands()

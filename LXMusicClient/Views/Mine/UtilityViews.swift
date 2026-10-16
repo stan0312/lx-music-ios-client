@@ -232,7 +232,7 @@ struct AboutView: View {
         .navigationTitle("服务器信息")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            config = try? await session.api?.getPlayerConfig() ?? [:]
+            config = (try? await session.api?.getPlayerConfig()) ?? [:]
         }
     }
 }

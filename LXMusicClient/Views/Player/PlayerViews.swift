@@ -297,7 +297,7 @@ struct CommentSheet: View {
         .presentationDetents([.medium, .large])
         .task {
             guard let song else { isLoading = false; return }
-            comments = try? await session.api?.comment(song: song) ?? []
+            comments = (try? await session.api?.comment(song: song)) ?? []
             isLoading = false
         }
     }
