@@ -464,9 +464,9 @@ struct CustomSong: Identifiable, Hashable {
             ?? stringValue(deepGet(d, ["id"])) ?? filename
     }
 
-    /// 转为可播放的 Song（source = "custom"，携带 filename）
-    func asSong() -> Song {
+    /// 转为可播放的 Song（source = "custom"，携带 filename 与封面）
+    func asSong(coverURL: String? = nil) -> Song {
         Song(id: id, name: name, singer: singer, source: "custom",
-             interval: interval, customFilename: filename)
+             albumPic: coverURL, interval: interval, customFilename: filename)
     }
 }

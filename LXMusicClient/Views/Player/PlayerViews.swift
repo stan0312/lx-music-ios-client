@@ -49,18 +49,19 @@ struct MiniPlayerView: View {
     }
 }
 
-/// 全屏播放页（汽水音乐风格：封面取色背景 / 上下滑切歌 / 点击切歌词 / 右上搜索 / 数据行）
+/// 全屏播放页（汽水音乐风格）
+/// 顶栏：收起 + 标题 + 搜索；封面取色背景、上下滑切歌、点封面切歌词；
+/// 底部：喜欢 / 评论 / 定时 / 三点菜单（删除、不喜欢），进度条，中间播放暂停。
 struct FullPlayerView: View {
     @EnvironmentObject var player: PlayerManager
     @EnvironmentObject var session: AppSession
     var onClose: () -> Void = {}
     @State private var showLyrics = true
-    @State private var showQueue = false
     @State private var showComment = false
-    @State private var showDownload = false
     @State private var showSearch = false
     @State private var bgColor: Color = .accentColor
     @State private var commentCount: Int?
+    @State private var toast: String?
 
     var body: some View {
         ZStack {
@@ -70,17 +71,27 @@ struct FullPlayerView: View {
                 Spacer(minLength: 10)
                 coverView
                     .gesture(verticalSwipe)
-                Spacer(minLength: 18)
+                Spacer(minLength: 14)
                 if showLyrics { lyricsView }
                 songMeta
-                dataRow
-                bottomControls
+                actionRow
+                progressBar
+                playRow
             }
         }
         .preferredColorScheme(.dark)
-        .sheet(isPresented: $showQueue) { QueueSheet() }
+        .overlay(alignment: .top) {
+            if let toast {
+                Text(toast)
+                    .font(.footnote)
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(.black.opacity(0.6))
+                    .foregroundColor(.white)
+                    .clipShape(Capsule())
+                    .padding(.top, 60)
+            }
+        }
         .sheet(isPresented: $showComment) { CommentSheet(song: player.currentSong) }
-        .sheet(isPresented: $showDownload) { DownloadSheet(song: player.currentSong) }
         .fullScreenCover(isPresented: $showSearch) {
             NavigationStack {
                 SearchView(initialKeyword: "")
@@ -97,7 +108,7 @@ struct FullPlayerView: View {
         }
     }
 
-    /// 上下滑切歌
+    /// 上下滑切歌（上一首 / 下一首）
     private var verticalSwipe: some Gesture {
         DragGesture(minimumDistance: 30)
             .onEnded { value in
@@ -128,7 +139,6 @@ struct FullPlayerView: View {
             .buttonStyle(.plain)
             Text("LX 音乐").font(.system(.headline, design: .rounded)).bold().foregroundColor(.white)
             Spacer()
-            Text("模式选择").font(.footnote).foregroundColor(.white.opacity(0.7))
             Button { showSearch = true } label: {
                 Image(systemName: "magnifyingglass").font(.system(size: 16, weight: .semibold))
                     .foregroundColor(.white)
@@ -208,87 +218,121 @@ struct FullPlayerView: View {
         .padding(.top, 8)
     }
 
-    private var dataRow: some View {
-        HStack(spacing: 46) {
-            dataItem("heart", "赞")
-            Button { showComment = true } label: {
-                VStack(spacing: 3) {
-                    Image(systemName: "bubble.left").font(.system(size: 20))
-                    Text("\(commentCountText()) 评论").font(.caption2)
-                }
+    /// 喜欢 / 评论 / 定时 / 三点菜单
+    private var actionRow: some View {
+        HStack(spacing: 0) {
+            Button { toggleCurrentLike() } label: {
+                imageWithLabel(currentSongIsLiked ? "heart.fill" : "heart",
+                               currentSongIsLiked ? "已喜欢" : "喜欢")
+                    .foregroundColor(currentSongIsLiked ? Color.pink : .white.opacity(0.85))
             }
             .buttonStyle(.plain)
-            dataItem("arrowshape.turn.up.right", "转发")
-        }
-        .foregroundColor(.white.opacity(0.85))
-        .padding(.vertical, 6)
-    }
 
-    private func dataItem(_ icon: String, _ label: String) -> some View {
-        VStack(spacing: 3) {
-            Image(systemName: icon).font(.system(size: 20))
-            Text(label).font(.caption2)
-        }
-    }
+            Spacer()
+            Button { showComment = true } label: {
+                imageWithLabel("bubble.left", "评论").foregroundColor(.white.opacity(0.85))
+            }
+            .buttonStyle(.plain)
 
-    private func commentCountText() -> String {
-        guard let c = commentCount, c > 0 else { return "0" }
-        if c >= 10000 { return String(format: "%.1f万", Double(c) / 10000) }
-        return "\(c)"
-    }
-
-    private var bottomControls: some View {
-        VStack(spacing: 14) {
-            // 进度
-            VStack(spacing: 4) {
-                Slider(value: Binding(
-                    get: { player.currentTime },
-                    set: { player.seek(to: $0) }
-                ), in: 0...max(player.duration, 1))
-                .tint(.white)
-                HStack {
-                    Text(timeText(player.currentTime)).font(.caption2.monospacedDigit()).foregroundColor(.white.opacity(0.7))
-                    Spacer()
-                    Text(player.currentSong?.durationText ?? "--:--").font(.caption2.monospacedDigit()).foregroundColor(.white.opacity(0.7))
-                }
+            Spacer()
+            Menu {
+                Button("关闭定时", action: { player.cancelSleepTimer() })
+                Divider()
+                Button("15 分钟") { player.startSleepTimer(minutes: 15) }
+                Button("30 分钟") { player.startSleepTimer(minutes: 30) }
+                Button("60 分钟") { player.startSleepTimer(minutes: 60) }
+            } label: {
+                imageWithLabel("clock", sleepTimerText).foregroundColor(.white.opacity(0.85))
             }
 
-            // 主控制
+            Spacer()
+            Menu {
+                Button(role: .destructive) { dislikeCurrentSong() } label: {
+                    Label("不喜欢 · 不推荐", systemImage: "hand.thumbsdown")
+                }
+                Divider()
+                Button(role: .destructive) { player.removeCurrentFromQueue() } label: {
+                    Label("删除这首歌曲", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.9))
+                    .frame(width: 40, height: 40)
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 10)
+    }
+
+    private var currentSongIsLiked: Bool {
+        guard let s = player.currentSong, !s.id.isEmpty else { return false }
+        return player.isLiked(s)
+    }
+
+    private func toggleCurrentLike() {
+        guard let s = player.currentSong, !s.id.isEmpty else { return }
+        player.toggleLike(s)
+    }
+
+    private var sleepTimerText: String {
+        guard let r = player.sleepRemaining, r > 0 else { return "定时" }
+        let t = Int(r)
+        if t >= 60 { return "\(t / 60)分" }
+        return "\(t)秒"
+    }
+
+    /// 把当前歌曲加入“不喜欢”黑名单并跳过
+    private func dislikeCurrentSong() {
+        guard let song = player.currentSong, let api = session.api else { return }
+        Task {
+            do {
+                try await api.dislikeAdd(song: song)
+                showToast("已加入“不喜欢”黑名单")
+                player.removeCurrentFromQueue()
+            } catch {
+                showToast("操作失败：\(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func showToast(_ msg: String) {
+        toast = msg
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            if toast == msg { toast = nil }
+        }
+    }
+
+    private var progressBar: some View {
+        VStack(spacing: 4) {
+            Slider(value: Binding(
+                get: { player.currentTime },
+                set: { player.seek(to: $0) }
+            ), in: 0...max(player.duration, 1))
+            .tint(.white)
             HStack {
-                Button { showQueue = true } label: { Image(systemName: "list.bullet").font(.title3).foregroundColor(.white.opacity(0.85)) }
+                Text(timeText(player.currentTime)).font(.caption2.monospacedDigit()).foregroundColor(.white.opacity(0.7))
                 Spacer()
-                Button { player.previous() } label: { Image(systemName: "backward.fill").font(.system(size: 26)).foregroundColor(.white) }
-                Spacer()
-                Button { player.togglePlayPause() } label: {
-                    Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 60)).foregroundColor(.white)
-                }
-                Spacer()
-                Button { player.next() } label: { Image(systemName: "forward.fill").font(.system(size: 26)).foregroundColor(.white) }
-                Spacer()
-                Menu {
-                    ForEach([1.0, 1.25, 1.5, 2.0], id: \.self) { r in
-                        Button(String(format: "%.2gx", r)) { player.setRate(Float(r)) }
-                    }
-                } label: {
-                    Text(String(format: "%.2gx", player.rate))
-                        .font(.footnote.weight(.semibold)).foregroundColor(.white.opacity(0.85))
-                }
+                Text(player.currentSong?.durationText ?? "--:--").font(.caption2.monospacedDigit()).foregroundColor(.white.opacity(0.7))
             }
-            .padding(.horizontal, 24)
-
-            // 次级控制
-            HStack(spacing: 26) {
-                Button { showComment = true } label: { imageWithLabel("bubble.left", "评论") }
-                Spacer()
-                Button { showDownload = true } label: { imageWithLabel("arrow.down.circle", "下载") }
-                Spacer()
-                Button { withAnimation { showLyrics.toggle() } } label: { imageWithLabel("text.quote", showLyrics ? "封面" : "歌词") }
-            }
-            .padding(.horizontal, 32)
         }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 18)
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+    }
+
+    /// 主控制：中间播放 / 暂停（无左右切歌按钮）
+    private var playRow: some View {
+        HStack {
+            Spacer()
+            Button { player.togglePlayPause() } label: {
+                Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                    .font(.system(size: 62)).foregroundColor(.white)
+            }
+            .buttonStyle(.plain)
+            Spacer()
+        }
+        .padding(.top, 2)
+        .padding(.bottom, 14)
     }
 
     private func imageWithLabel(_ icon: String, _ label: String) -> some View {
@@ -296,7 +340,6 @@ struct FullPlayerView: View {
             Image(systemName: icon).font(.system(size: 20))
             Text(label).font(.caption2)
         }
-        .foregroundColor(.white.opacity(0.85))
     }
 
     private func timeText(_ t: Double) -> String {
@@ -413,7 +456,6 @@ struct DownloadSheet: View {
                         guard let api = session.api, let song else { return }
                         downloading = true
                         Task {
-                            // 先解析直链，再交给服务器后台下载缓存
                             do {
                                 let u = try await api.musicURL(song: song, quality: session.quality)
                                 try await api.cacheDownload(song: song, streamURL: u, quality: session.quality)

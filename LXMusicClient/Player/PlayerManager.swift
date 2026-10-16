@@ -19,12 +19,14 @@ final class PlayerManager: ObservableObject {
     @Published var volume: Float = 1.0
     @Published var showingMiniError = false
     @Published var playError: String?
+    @Published var sleepRemaining: TimeInterval?   // 播放自动停止倒计时（nil = 关闭）
 
     var currentSong: Song? {
         guard queue.indices.contains(currentIndex) else { return nil }
         return queue[currentIndex]
     }
 
+    private var sleepTask: Task<Void, Never>?
     private var player: AVPlayer?
     private var timeObserver: Any?
     private var endTimeObserver: NSObjectProtocol?
@@ -36,6 +38,7 @@ final class PlayerManager: ObservableObject {
     private var quality: String = "128k"
 
     private init() {
+        likedIds = Set(UserDefaults.standard.stringArray(forKey: Self.likedKey) ?? [])
         configureAudioSession()
         configureRemoteCommands()
     }
@@ -95,7 +98,83 @@ final class PlayerManager: ObservableObject {
 
     func togglePlayPause() {
         guard player != nil else { return }
-        if isPlaying { player?.pause() } else { player?.play() }
+        if isPlaying {
+            player?.pause()
+            isPlaying = false
+        } else {
+            player?.play()
+            isPlaying = true
+        }
+    }
+
+    // MARK: - 删除当前歌曲（从队列移除，非破坏性）
+
+    func removeCurrentFromQueue() {
+        guard queue.indices.contains(currentIndex) else { return }
+        queue.remove(at: currentIndex)
+        if queue.isEmpty {
+            currentIndex = -1
+            player?.pause()
+            isPlaying = false
+            sleepTask?.cancel()
+            sleepRemaining = nil
+            persistState()
+            return
+        }
+        currentIndex = min(currentIndex, queue.count - 1)
+        loadCurrent()
+        persistState()
+    }
+
+    // MARK: - 播放自动停止（睡眠定时器，本地）
+
+    func startSleepTimer(minutes: Int) {
+        sleepTask?.cancel()
+        guard minutes > 0 else { sleepRemaining = nil; return }
+        sleepRemaining = TimeInterval(minutes * 60)
+        let target = Date().addingTimeInterval(sleepRemaining!)
+        sleepTask = Task { @MainActor [weak self] in
+            while let self, !Task.isCancelled {
+                let left = target.timeIntervalSinceNow
+                if left <= 0 {
+                    self.sleepTask?.cancel()
+                    self.sleepTask = nil
+                    self.player?.pause()
+                    self.isPlaying = false
+                    self.sleepRemaining = nil
+                    return
+                }
+                self.sleepRemaining = left
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+        }
+    }
+
+    func cancelSleepTimer() {
+        sleepTask?.cancel()
+        sleepTask = nil
+        sleepRemaining = nil
+    }
+
+    // MARK: - 喜欢（本地收藏，按歌曲 id 记忆）
+
+    private static let likedKey = "lx.likedSongs"
+    private var likedIds: Set<String> = []
+
+    func isLiked(_ song: Song) -> Bool {
+        likedIds.contains(song.id)
+    }
+
+    /// 切换喜欢状态，返回新的喜欢状态
+    @discardableResult
+    func toggleLike(_ song: Song) -> Bool {
+        if likedIds.contains(song.id) {
+            likedIds.remove(song.id)
+        } else {
+            likedIds.insert(song.id)
+        }
+        UserDefaults.standard.set(Array(likedIds), forKey: Self.likedKey)
+        return likedIds.contains(song.id)
     }
 
     func seek(to time: Double) {

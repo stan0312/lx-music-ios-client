@@ -292,6 +292,34 @@ final class LXAPIClient {
         return []
     }
 
+    // MARK: - 黑名单（不喜欢 / 不推荐）lxserver /api/music/dislike/*
+
+    /// 把当前歌曲加入“不喜欢/不推荐”黑名单（type=song，按歌名+歌手匹配）
+    func dislikeAdd(song: Song) async throws {
+        _ = try await request(try url("/api/music/dislike/add"), method: "POST",
+                              body: dislikePayload(song))
+    }
+
+    /// 从黑名单移除当前歌曲
+    func dislikeRemove(song: Song) async throws {
+        _ = try await request(try url("/api/music/dislike/remove"), method: "POST",
+                              body: dislikePayload(song))
+    }
+
+    /// 查询当前黑名单规则
+    func dislikeList() async throws -> [String: Any] {
+        let obj: Any = try await request(try url("/api/music/dislike"))
+        return (obj as? [String: Any]) ?? [:]
+    }
+
+    private func dislikePayload(_ song: Song) -> [String: Any] {
+        var body: [String: Any] = ["type": "song", "name": song.name, "singer": song.singer,
+                                   "source": song.source, "id": song.id,
+                                   "pic": song.albumPic ?? "", "interval": ""]
+        if let iv = song.interval { body["interval"] = String(iv) }
+        return body
+    }
+
     /// 下载直链（服务器代理，自动注入 ID3）
     func downloadLink(song: Song) -> String {
         var q = "url=\(song.url?.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"

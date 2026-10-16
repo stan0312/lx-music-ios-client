@@ -39,10 +39,8 @@ struct CustomDirView: View {
             } else {
                 List {
                     ForEach(songs) { item in
-                        let song = item.asSong()
-                        SongRow(song: song, onTap: {
-                            player.play(songs: songs.map { $0.asSong() },
-                                        startIndex: songs.firstIndex(of: item) ?? 0)
+                        SongRow(song: item.asSong(coverURL: coverURL(for: item)), onTap: {
+                            playAll(startingAt: item)
                         }) {
                             AnyView(coverView(for: item))
                         }
@@ -70,12 +68,24 @@ struct CustomDirView: View {
         .task { await load() }
     }
 
+    private func coverURL(for item: CustomSong) -> String? {
+        guard let api = session.api, let user = session.config?.username else { return nil }
+        return try? api.customCoverURL(filename: item.filename, user: user).absoluteString
+    }
+
     private func coverView(for item: CustomSong) -> some View {
-        var url: String?
-        if let api = session.api, let user = session.config?.username {
-            url = try? api.customCoverURL(filename: item.filename, user: user).absoluteString
+        CoverImage(url: coverURL(for: item), width: 46, cornerRadius: 8)
+    }
+
+    /// 整目录开播（每首歌附带内嵌封面，保证播放页取色 + 封面显示）
+    private func playAll(startingAt target: CustomSong) {
+        guard let api = session.api else { return }
+        let user = session.config?.username ?? ""
+        let queue = songs.map { c in
+            let cover = (try? api.customCoverURL(filename: c.filename, user: user).absoluteString)
+            return c.asSong(coverURL: cover)
         }
-        return CoverImage(url: url, width: 46, cornerRadius: 8)
+        player.play(songs: queue, startIndex: queue.firstIndex(where: { $0.id == target.id }) ?? 0)
     }
 
     private func load() async {
