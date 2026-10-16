@@ -38,7 +38,7 @@ jobs:
         run: |
           xcodebuild \
             -project LXMusicClient.xcodeproj \
-            -target LXMusicClient \
+            -scheme LXMusicClient \
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath Build \

@@ -16,6 +16,13 @@ settings:
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: ""
     INFOPLIST_KEY_CFBundleDisplayName: "LX 音乐"
+schemes:
+  LXMusicClient:
+    build:
+      targets:
+        LXMusicClient: all
+    run:
+      config: Debug
 targets:
   LXMusicClient:
     type: application
