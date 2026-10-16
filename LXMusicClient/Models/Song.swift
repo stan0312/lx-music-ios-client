@@ -65,17 +65,23 @@ struct Song: Identifiable, Hashable {
     var size: String?
     var lrc: String?
     var url: String?        // 已解析直链
+    var customFilename: String? // 自定义目录歌曲的相对路径（source == "custom" 时使用）
+
+    /// 是否为“自定义目录”歌曲（由本地服务器目录提供音频）
+    var isCustom: Bool { source == "custom" }
 
     init(
         id: String, name: String, singer: String, source: String,
         albumName: String? = nil, albumPic: String? = nil,
         interval: Double? = nil, quality: String? = nil,
-        size: String? = nil, lrc: String? = nil, url: String? = nil
+        size: String? = nil, lrc: String? = nil, url: String? = nil,
+        customFilename: String? = nil
     ) {
         self.id = id; self.name = name; self.singer = singer
         self.source = source; self.albumName = albumName; self.albumPic = albumPic
         self.interval = interval; self.quality = quality
         self.size = size; self.lrc = lrc; self.url = url
+        self.customFilename = customFilename
     }
 
     /// 容错解析
@@ -190,6 +196,7 @@ struct SongListTag: Identifiable, Hashable {
 struct LeaderboardBoard: Identifiable, Hashable {
     var id: String { "\(platform)-\(idRaw)" }
     var idRaw: String
+    var bangid: String   // 榜单详情接口所需参数（如 "8888"）
     var platform: String
     var name: String
     var cover: String?
@@ -199,6 +206,7 @@ struct LeaderboardBoard: Identifiable, Hashable {
         guard let idRaw = stringValue(deepGet(d, ["id"])) else { return nil }
         guard let name = stringValue(deepGet(d, ["name"])) else { return nil }
         self.idRaw = idRaw
+        self.bangid = stringValue(deepGet(d, ["bangid"])) ?? idRaw
         self.name = name
         self.platform = stringValue(deepGet(d, ["platform"])) ?? "tx"
         self.cover = stringValue(deepGet(d, ["coverImgUrl"])) ?? stringValue(deepGet(d, ["cover"]))
@@ -405,5 +413,39 @@ struct SongComment: Identifiable, Hashable {
         self.time = stringValue(deepGet(d, ["time"])) ?? stringValue(deepGet(d, ["createTime"]))
         self.likes = doubleValue(deepGet(d, ["likedCount"])) ?? doubleValue(deepGet(d, ["likeCount"]))
         self.avatar = stringValue(deepGet(d, ["avatar"])) ?? stringValue(deepGet(d, ["pic"]))
+    }
+}
+
+// MARK: - 自定义音乐目录（lxserver /api/music/custom/*）
+
+/// 服务端本地音乐目录中的一首歌曲
+struct CustomSong: Identifiable, Hashable {
+    var id: String
+    var filename: String      // 相对目录路径，如 "歌手 - 歌名.mp3" 或 "子目录/歌名.mp3"
+    var name: String
+    var singer: String
+    var source: String
+    var interval: Double?
+    var hasLyric: Bool
+
+    init?(json: Any) {
+        guard let d = json as? [String: Any] else { return nil }
+        guard let filename = stringValue(deepGet(d, ["filename"])), !filename.isEmpty else { return nil }
+        let songInfo = (d["songInfo"] as? [String: Any]) ?? d
+        self.filename = filename
+        self.name = stringValue(deepGet(songInfo, ["name"])) ?? stringValue(deepGet(d, ["name"]))
+            ?? filename.components(separatedBy: "/").last ?? filename
+        self.singer = stringValue(deepGet(songInfo, ["singer"])) ?? stringValue(deepGet(d, ["singer"])) ?? "本地音乐"
+        self.source = stringValue(deepGet(songInfo, ["source"])) ?? "custom"
+        self.interval = doubleValue(deepGet(songInfo, ["interval"])) ?? doubleValue(deepGet(d, ["interval"]))
+        self.hasLyric = (deepGet(d, ["hasLyric"]) as? Bool) ?? false
+        self.id = stringValue(deepGet(songInfo, ["songmid"])) ?? stringValue(deepGet(songInfo, ["id"]))
+            ?? stringValue(deepGet(d, ["id"])) ?? filename
+    }
+
+    /// 转为可播放的 Song（source = "custom"，携带 filename）
+    func asSong() -> Song {
+        Song(id: id, name: name, singer: singer, source: "custom",
+             interval: interval, customFilename: filename)
     }
 }

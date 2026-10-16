@@ -70,7 +70,7 @@ final class AppSession: ObservableObject {
             c.playerPath = playerPath
             self.config = c
             self.api = client
-            PlayerManager.shared.configure(api: client)
+            PlayerManager.shared.configure(api: client, username: c.username)
             PlayerManager.shared.setQuality(quality)
             ConfigStore.shared.save(c)
             isLoggedIn = true

@@ -29,6 +29,7 @@ final class PlayerManager: ObservableObject {
     private var timeObserver: Any?
     private var lyricTask: Task<Void, Never>?
     private var api: LXAPIClient?
+    private var username: String?  // 用于自定义目录流媒体 URL 的 user 参数
     private var quality: String = "128k"
 
     private init() {
@@ -43,8 +44,9 @@ final class PlayerManager: ObservableObject {
         try? session.setActive(true)
     }
 
-    func configure(api: LXAPIClient?) {
+    func configure(api: LXAPIClient?, username: String? = nil) {
         self.api = api
+        self.username = username
     }
 
     // MARK: - 队列控制
@@ -124,20 +126,32 @@ final class PlayerManager: ObservableObject {
         let api = self.api
         let sid = song.id
         let quality = self.quality
+        let username = self.username
+        let isCustom = song.isCustom
+        let customFilename = song.customFilename
 
         Task {
             do {
                 guard let api else { throw LXError.noData }
-                // 1. 解析播放直链
-                let urlStr = try await api.musicURL(song: song, quality: quality)
-                // 歌曲可能因解析变化，用返回 URL
+                // 1. 解析播放直链（自定义目录歌曲直接走服务器本地文件流，支持 Range）
+                let urlStr: String
+                if isCustom, let fn = customFilename, let user = username {
+                    urlStr = try api.customFileURL(filename: fn, user: user).absoluteString
+                } else {
+                    urlStr = try await api.musicURL(song: song, quality: quality)
+                }
                 guard let url = URL(string: urlStr) else { throw LXError.invalidURL }
                 self.preparePlayer(url: url)
 
                 // 2. 拉歌词
-                let lrc = try await api.lyric(song: Song(
-                    id: sid, name: song.name, singer: song.singer, source: song.source,
-                    albumPic: song.albumPic))
+                let lrc: String
+                if isCustom {
+                    lrc = (try? await api.customLyric(id: sid, name: song.name, singer: song.singer)) ?? ""
+                } else {
+                    lrc = try await api.lyric(song: Song(
+                        id: sid, name: song.name, singer: song.singer, source: song.source,
+                        albumPic: song.albumPic))
+                }
                 if lrc.isEmpty { self.lyrics = []; return }
                 self.lyrics = LyricLine.parse(lrc: lrc)
             } catch {

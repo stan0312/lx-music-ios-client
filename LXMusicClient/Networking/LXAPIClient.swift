@@ -128,14 +128,14 @@ final class LXAPIClient {
     // MARK: - 搜索 / 热搜 / 联想
 
     func search(keyword: String, source: String? = nil, page: Int = 1, limit: Int = 30) async throws -> [Song] {
-        var q = ["kw": keyword, "page": "\(page)", "limit": "\(limit)"]
+        var q = ["name": keyword, "page": "\(page)", "limit": "\(limit)"]
         if let s = source, !s.isEmpty { q["source"] = s }
         let obj: Any = try await request(try url("/api/music/search", query: q))
         return extractSongs(obj)
     }
 
     func tipSearch(keyword: String, source: String = "tx") async throws -> [String] {
-        let obj: Any = try await request(try url("/api/music/tipSearch", query: ["kw": keyword, "source": source]))
+        let obj: Any = try await request(try url("/api/music/tipSearch", query: ["name": keyword, "source": source]))
         if let d = obj as? [String: Any] {
             if let list = d["list"] as? [String] { return list }
             if let arr = arrayValue(d["list"] ?? d["data"]) {
@@ -175,8 +175,8 @@ final class LXAPIClient {
     }
 
     func songListList(tag: String? = nil, page: Int = 1, limit: Int = 30) async throws -> [SongListInfo] {
-        var q = ["page": "\(page)", "limit": "\(limit)"]
-        if let tag, !tag.isEmpty { q["tag"] = tag }
+        var q = ["page": "\(page)", "limit": "\(limit)", "sortId": "hot"]
+        if let tag, !tag.isEmpty { q["tagId"] = tag }
         let obj: Any = try await request(try url("/api/music/songList/list", query: q))
         if let d = obj as? [String: Any], let arr = arrayValue(d["list"] ?? d["data"]) {
             return arr.compactMap { SongListInfo(json: $0) }
@@ -199,7 +199,7 @@ final class LXAPIClient {
 
     func leaderboardBoards(platform: String = "tx") async throws -> [LeaderboardBoard] {
         let obj: Any = try await request(try url("/api/music/leaderboard/boards",
-                                                 query: ["platform": platform]))
+                                                 query: ["source": platform]))
         if let d = obj as? [String: Any], let arr = arrayValue(d["list"] ?? d["data"]) {
             return arr.compactMap { LeaderboardBoard(json: $0) }
         }
@@ -207,9 +207,9 @@ final class LXAPIClient {
         return []
     }
 
-    func leaderboardList(platform: String, boardId: String, page: Int = 1) async throws -> [Song] {
+    func leaderboardList(platform: String, bangid: String, page: Int = 1) async throws -> [Song] {
         let obj: Any = try await request(try url("/api/music/leaderboard/list",
-                                                 query: ["platform": platform, "boardId": boardId, "page": "\(page)"]))
+                                                 query: ["source": platform, "bangid": bangid, "page": "\(page)"]))
         return extractSongs(obj)
     }
 
@@ -245,13 +245,13 @@ final class LXAPIClient {
 
     // MARK: - 播放 / 歌词 / 评论
 
-    /// 解析播放直链
+    /// 解析播放直链（请求体需包一层 songInfo）
     func musicURL(song: Song, quality: String? = nil) async throws -> String {
-        var body: [String: Any] = [
-            "id": song.id, "name": song.name, "singer": song.singer,
-            "source": song.source,
+        var songInfo: [String: Any] = [
+            "id": song.id, "name": song.name, "singer": song.singer, "source": song.source,
         ]
-        if let interval = song.interval { body["interval"] = interval }
+        if let interval = song.interval { songInfo["interval"] = interval }
+        var body: [String: Any] = ["songInfo": songInfo]
         if let q = quality, !q.isEmpty { body["quality"] = q }
 
         let obj: Any = try await request(try url("/api/music/url"), method: "POST", body: body)
@@ -265,9 +265,10 @@ final class LXAPIClient {
     }
 
     func lyric(song: Song) async throws -> String {
-        let body: [String: Any] = [
+        let songInfo: [String: Any] = [
             "id": song.id, "name": song.name, "singer": song.singer, "source": song.source,
         ]
+        let body: [String: Any] = ["songInfo": songInfo]
         let obj: Any = try await request(try url("/api/music/lyric"), method: "POST", body: body)
         if let s = obj as? String, !s.isEmpty { return s }
         if let d = obj as? [String: Any] {
@@ -279,10 +280,10 @@ final class LXAPIClient {
     }
 
     func comment(song: Song, type: String = "hot", page: Int = 1) async throws -> [SongComment] {
-        let body: [String: Any] = [
-            "id": song.id, "name": song.name, "singer": song.singer,
-            "source": song.source, "type": type, "page": page,
+        let songInfo: [String: Any] = [
+            "id": song.id, "name": song.name, "singer": song.singer, "source": song.source,
         ]
+        let body: [String: Any] = ["songInfo": songInfo, "type": type, "page": page]
         let obj: Any = try await request(try url("/api/music/comment"), method: "POST", body: body)
         if let d = obj as? [String: Any], let arr = arrayValue(d["list"] ?? d["data"] ?? d["comments"]) {
             return arr.compactMap { SongComment(json: $0) }
@@ -366,10 +367,12 @@ final class LXAPIClient {
         return []
     }
 
-    func cacheDownload(song: Song) async throws {
-        let body: [String: Any] = [
+    func cacheDownload(song: Song, url: String, quality: String? = nil) async throws {
+        let songInfo: [String: Any] = [
             "id": song.id, "name": song.name, "singer": song.singer, "source": song.source,
         ]
+        var body: [String: Any] = ["songInfo": songInfo, "url": url]
+        if let q = quality, !q.isEmpty { body["quality"] = q }
         _ = try await request(try url("/api/music/cache/download"), method: "POST", body: body)
     }
 
@@ -379,6 +382,47 @@ final class LXAPIClient {
 
     func cacheClear() async throws {
         _ = try await request(try url("/api/music/cache/clear"), method: "POST")
+    }
+
+    // MARK: - 自定义音乐目录（/api/music/custom/*）
+
+    /// 获取自定义目录歌曲列表
+    func customList() async throws -> [CustomSong] {
+        let obj: Any = try await request(try url("/api/music/custom/list"))
+        if let d = obj as? [String: Any], let arr = arrayValue(d["data"] ?? d["list"]) {
+            return arr.compactMap { CustomSong(json: $0) }
+        }
+        if let arr = obj as? [Any] { return arr.compactMap { CustomSong(json: $0) } }
+        return []
+    }
+
+    /// 触发服务器重新扫描自定义目录
+    func customSync() async throws {
+        _ = try await request(try url("/api/music/custom/sync"), method: "POST")
+    }
+
+    /// 自定义目录歌曲的流式播放直链（AVPlayer 直接可播，token 走 query）
+    func customFileURL(filename: String, user: String) throws -> URL {
+        try url("/api/music/custom/file", query: ["filename": filename, "user": user, "token": token])
+    }
+
+    /// 自定义目录歌曲的内嵌封面
+    func customCoverURL(filename: String, user: String) throws -> URL {
+        try url("/api/music/custom/cover", query: ["filename": filename, "user": user, "token": token])
+    }
+
+    /// 自定义目录歌曲的歌词（best-effort，取服务端本地 .lrc 缓存）
+    func customLyric(id: String, name: String, singer: String) async throws -> String {
+        let obj: Any = try await request(try url("/api/music/lyric",
+                                                 query: ["source": "custom", "songmid": id,
+                                                         "name": name, "singer": singer]))
+        if let s = obj as? String, !s.isEmpty { return s }
+        if let d = obj as? [String: Any] {
+            if let lrc = d["lrc"] as? String, !lrc.isEmpty { return lrc }
+            if let data = d["data"] as? String, !data.isEmpty { return data }
+            if let data = d["data"] as? [String: Any], let lrc = data["lrc"] as? String { return lrc }
+        }
+        return ""
     }
 
     // MARK: - 快照备份

@@ -203,7 +203,7 @@ struct BoardSongListView: View {
         isLoading = true
         error = nil
         do {
-            songs = try await session.api?.leaderboardList(platform: board.platform, boardId: board.idRaw) ?? []
+            songs = try await session.api?.leaderboardList(platform: board.platform, bangid: board.bangid) ?? []
         } catch {
             self.error = error.localizedDescription
         }

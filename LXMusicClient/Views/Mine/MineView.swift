@@ -26,6 +26,13 @@ struct MineView: View {
                         }
                     }
                 }
+                Section("本地音乐") {
+                    NavigationLink {
+                        CustomDirView()
+                    } label: {
+                        Label("自定义目录", systemImage: "folder.fill")
+                    }
+                }
                 Section("存储与缓存") {
                     NavigationLink {
                         CacheView()
