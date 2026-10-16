@@ -8,6 +8,8 @@ options:
   createIntermediateGroups: true
   generateEmptyDirectories: true
   developmentLanguage: zh-Hans
+  # 固定工程格式，保证 runner（Xcode 15.4）可读取，避免"future format"错误
+  objectVersion: 56
 settings:
   base:
     SWIFT_VERSION: "5.9"
