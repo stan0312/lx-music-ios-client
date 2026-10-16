@@ -328,7 +328,7 @@ struct DownloadSheet: View {
                             // 先解析直链，再交给服务器后台下载缓存
                             do {
                                 let u = try await api.musicURL(song: song, quality: session.quality)
-                                try await api.cacheDownload(song: song, url: u, quality: session.quality)
+                                try await api.cacheDownload(song: song, streamURL: u, quality: session.quality)
                             } catch { }
                             downloading = false
                             done = true

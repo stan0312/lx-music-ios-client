@@ -367,11 +367,11 @@ final class LXAPIClient {
         return []
     }
 
-    func cacheDownload(song: Song, url: String, quality: String? = nil) async throws {
+    func cacheDownload(song: Song, streamURL: String, quality: String? = nil) async throws {
         let songInfo: [String: Any] = [
             "id": song.id, "name": song.name, "singer": song.singer, "source": song.source,
         ]
-        var body: [String: Any] = ["songInfo": songInfo, "url": url]
+        var body: [String: Any] = ["songInfo": songInfo, "url": streamURL]
         if let q = quality, !q.isEmpty { body["quality"] = q }
         _ = try await request(try url("/api/music/cache/download"), method: "POST", body: body)
     }
