@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// 底部迷你播放条
 struct MiniPlayerView: View {
@@ -48,108 +49,110 @@ struct MiniPlayerView: View {
     }
 }
 
-/// 全屏播放页（汽水音乐风格）
+/// 全屏播放页（汽水音乐风格：封面取色背景 / 上下滑切歌 / 点击切歌词 / 右上搜索 / 数据行）
 struct FullPlayerView: View {
     @EnvironmentObject var player: PlayerManager
+    @EnvironmentObject var session: AppSession
     var onClose: () -> Void = {}
     @State private var showLyrics = true
     @State private var showQueue = false
     @State private var showComment = false
     @State private var showDownload = false
+    @State private var showSearch = false
+    @State private var bgColor: Color = .accentColor
+    @State private var commentCount: Int?
 
     var body: some View {
         ZStack {
-            // 模糊封面背景
             background
             VStack(spacing: 0) {
                 topBar
-                Spacer()
-                if showLyrics {
-                    coverView
-                    Spacer()
-                    lyricsView
-                } else {
-                    coverView
-                        .padding(.top, 20)
-                    Spacer()
-                }
+                Spacer(minLength: 10)
+                coverView
+                    .gesture(verticalSwipe)
+                Spacer(minLength: 18)
+                if showLyrics { lyricsView }
+                songMeta
+                dataRow
                 bottomControls
             }
         }
         .preferredColorScheme(.dark)
-        .overlay(alignment: .topTrailing) {
-            if showLyrics {
-                Button {
-                    withAnimation { showLyrics.toggle() }
-                } label: {
-                    Image(systemName: "text.quote")
-                        .font(.system(size: 15))
-                        .padding(10)
-                        .background(.black.opacity(0.35))
-                        .clipShape(Circle())
-                }
-                .padding(.top, 54).padding(.trailing, 16)
-            }
-        }
         .sheet(isPresented: $showQueue) { QueueSheet() }
         .sheet(isPresented: $showComment) { CommentSheet(song: player.currentSong) }
         .sheet(isPresented: $showDownload) { DownloadSheet(song: player.currentSong) }
+        .fullScreenCover(isPresented: $showSearch) {
+            NavigationStack {
+                SearchView(initialKeyword: "")
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) { Button("完成") { showSearch = false } }
+                    }
+            }
+        }
+        .task(id: player.currentSong?.id) {
+            bgColor = .accentColor
+            commentCount = nil
+            extractDominantColor()
+            loadCommentCount()
+        }
+    }
+
+    /// 上下滑切歌
+    private var verticalSwipe: some Gesture {
+        DragGesture(minimumDistance: 30)
+            .onEnded { value in
+                let dy = value.translation.height
+                if dy < -60 { player.next() }
+                else if dy > 60 { player.previous() }
+            }
     }
 
     private var background: some View {
         GeometryReader { geo in
             ZStack {
                 Color(.systemBackground)
-                if let pic = player.currentSong?.albumPic, let u = URL(string: pic) {
-                    AsyncImage(url: u) { phase in
-                        switch phase {
-                        case .success(let img):
-                            img.resizable().scaledToFill()
-                        default:
-                            Color.accentColor.opacity(0.3)
-                        }
-                    }
-                    .frame(width: geo.size.width, height: geo.size.height)
-                    .clipped()
-                } else {
-                    LinearGradient(colors: [Color.accentColor.opacity(0.5), .black],
-                                   startPoint: .top, endPoint: .bottom)
-                }
+                LinearGradient(colors: [bgColor.opacity(0.85), bgColor.opacity(0.55), .black],
+                               startPoint: .top, endPoint: .bottom)
             }
-            .blur(radius: 60, opaque: true)
-            .overlay(Color.black.opacity(0.25))
+            .overlay(Color.black.opacity(0.22))
             .ignoresSafeArea()
         }
     }
 
     private var topBar: some View {
-        HStack {
-            Button {
-                onClose()
-            } label: {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 18, weight: .semibold))
+        HStack(spacing: 12) {
+            Button { onClose() } label: {
+                Image(systemName: "chevron.down").font(.system(size: 17, weight: .semibold))
                     .foregroundColor(.white)
             }
             .buttonStyle(.plain)
-            .padding(.leading, 16)
+            Text("LX 音乐").font(.system(.headline, design: .rounded)).bold().foregroundColor(.white)
             Spacer()
-            Capsule().fill(.white.opacity(0.4)).frame(width: 38, height: 5)
-            Spacer()
-            // 占位保持居中
-            Color.clear.frame(width: 24, height: 24).padding(.trailing, 16)
+            Text("模式选择").font(.footnote).foregroundColor(.white.opacity(0.7))
+            Button { showSearch = true } label: {
+                Image(systemName: "magnifyingglass").font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 34, height: 34)
+                    .background(.black.opacity(0.3))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
         }
-        .padding(.top, 12)
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
     }
 
     private var coverView: some View {
         VStack(spacing: 8) {
-            CoverImage(url: player.currentSong?.albumPic, width: 260, cornerRadius: 18)
-                .shadow(color: .black.opacity(0.5), radius: 22, y: 12)
-            Text(player.currentSong?.name ?? "")
-                .font(.system(.title2, design: .rounded)).bold().foregroundColor(.white)
-            Text(player.currentSong?.singer ?? "")
-                .font(.subheadline).foregroundColor(.white.opacity(0.8))
+            CoverImage(url: player.currentSong?.albumPic, width: 268, cornerRadius: 20)
+                .shadow(color: .black.opacity(0.5), radius: 24, y: 14)
+            Text(showLyrics ? "轻点封面查看歌词" : "轻点封面查看封面")
+                .font(.caption2).foregroundColor(.white.opacity(0.55))
+                .padding(.top, 4)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.easeInOut(duration: 0.25)) { showLyrics.toggle() }
         }
     }
 
@@ -166,20 +169,72 @@ struct FullPlayerView: View {
                             .frame(maxWidth: .infinity)
                     }
                 }
-                .padding(.vertical, 60)
+                .padding(.vertical, 8)
                 .padding(.horizontal, 24)
             }
-            .frame(maxHeight: 210)
+            .frame(maxHeight: 150)
             .onChange(of: player.activeLyricIndex) { idx in
                 if idx >= 0 { withAnimation(.easeInOut(duration: 0.3)) { proxy.scrollTo(idx, anchor: .center) } }
             }
             .overlay {
                 if player.lyrics.isEmpty {
-                    Text("暂无歌词")
-                        .font(.footnote).foregroundColor(.white.opacity(0.5))
+                    Text("暂无歌词").font(.footnote).foregroundColor(.white.opacity(0.5))
                 }
             }
         }
+    }
+
+    private var songMeta: some View {
+        VStack(spacing: 6) {
+            Text(player.currentSong?.name ?? "")
+                .font(.system(.title2, design: .rounded)).bold().foregroundColor(.white)
+                .lineLimit(1)
+            Text(player.currentSong?.singer ?? "")
+                .font(.subheadline).foregroundColor(.white.opacity(0.8)).lineLimit(1)
+            HStack(spacing: 6) {
+                if let q = player.currentSong?.quality, !q.isEmpty {
+                    Text(q).font(.system(size: 10, weight: .semibold))
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(.white.opacity(0.18)).foregroundColor(.white)
+                        .clipShape(Capsule())
+                }
+                Text(player.currentSong?.sourceName ?? "")
+                    .font(.system(size: 10, weight: .semibold))
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(.white.opacity(0.18)).foregroundColor(.white)
+                    .clipShape(Capsule())
+            }
+        }
+        .padding(.top, 8)
+    }
+
+    private var dataRow: some View {
+        HStack(spacing: 46) {
+            dataItem("heart", "赞")
+            Button { showComment = true } label: {
+                VStack(spacing: 3) {
+                    Image(systemName: "bubble.left").font(.system(size: 20))
+                    Text("\(commentCountText()) 评论").font(.caption2)
+                }
+            }
+            .buttonStyle(.plain)
+            dataItem("arrowshape.turn.up.right", "转发")
+        }
+        .foregroundColor(.white.opacity(0.85))
+        .padding(.vertical, 6)
+    }
+
+    private func dataItem(_ icon: String, _ label: String) -> some View {
+        VStack(spacing: 3) {
+            Image(systemName: icon).font(.system(size: 20))
+            Text(label).font(.caption2)
+        }
+    }
+
+    private func commentCountText() -> String {
+        guard let c = commentCount, c > 0 else { return "0" }
+        if c >= 10000 { return String(format: "%.1f万", Double(c) / 10000) }
+        return "\(c)"
     }
 
     private var bottomControls: some View {
@@ -198,7 +253,7 @@ struct FullPlayerView: View {
                 }
             }
 
-            // 控制
+            // 主控制
             HStack {
                 Button { showQueue = true } label: { Image(systemName: "list.bullet").font(.title3).foregroundColor(.white.opacity(0.85)) }
                 Spacer()
@@ -206,16 +261,14 @@ struct FullPlayerView: View {
                 Spacer()
                 Button { player.togglePlayPause() } label: {
                     Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 62)).foregroundColor(.white)
+                        .font(.system(size: 60)).foregroundColor(.white)
                 }
                 Spacer()
                 Button { player.next() } label: { Image(systemName: "forward.fill").font(.system(size: 26)).foregroundColor(.white) }
                 Spacer()
                 Menu {
                     ForEach([1.0, 1.25, 1.5, 2.0], id: \.self) { r in
-                        Button(String(format: "%.2gx", r)) {
-                            player.setRate(Float(r))
-                        }
+                        Button(String(format: "%.2gx", r)) { player.setRate(Float(r)) }
                     }
                 } label: {
                     Text(String(format: "%.2gx", player.rate))
@@ -230,10 +283,9 @@ struct FullPlayerView: View {
                 Spacer()
                 Button { showDownload = true } label: { imageWithLabel("arrow.down.circle", "下载") }
                 Spacer()
-                Button { showLyrics.toggle() } label: { imageWithLabel("text.quote", showLyrics ? "封面" : "歌词") }
+                Button { withAnimation { showLyrics.toggle() } } label: { imageWithLabel("text.quote", showLyrics ? "封面" : "歌词") }
             }
             .padding(.horizontal, 32)
-            .padding(.top, 2)
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 18)
@@ -251,6 +303,42 @@ struct FullPlayerView: View {
         guard t.isFinite, t >= 0 else { return "00:00" }
         let s = Int(t)
         return String(format: "%02d:%02d", s / 60, s % 60)
+    }
+
+    private func extractDominantColor() {
+        guard let pic = player.currentSong?.albumPic, let u = URL(string: pic) else { return }
+        Task.detached(priority: .utility) {
+            guard let data = try? Data(contentsOf: u),
+                  let img = UIImage(data: data),
+                  let avg = UIImage.averageColor(img) else { return }
+            DispatchQueue.main.async { bgColor = Color(uiColor: avg) }
+        }
+    }
+
+    private func loadCommentCount() {
+        guard let song = player.currentSong else { return }
+        Task {
+            let list = (try? await session.api?.comment(song: song)) ?? []
+            commentCount = list.count
+        }
+    }
+}
+
+// MARK: - 封面主色提取（汽水音乐式背景）
+extension UIImage {
+    /// 缩到 1x1 采样平均色
+    static func averageColor(_ image: UIImage) -> UIColor? {
+        let size = CGSize(width: 1, height: 1)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        let color = renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
+        guard let cg = color.cgImage, let provider = cg.dataProvider,
+              let data = provider.data else { return nil }
+        let bytes = [UInt8](data)
+        guard bytes.count >= 4 else { return nil }
+        return UIColor(red: CGFloat(bytes[0]) / 255, green: CGFloat(bytes[1]) / 255,
+                       blue: CGFloat(bytes[2]) / 255, alpha: 1)
     }
 }
 

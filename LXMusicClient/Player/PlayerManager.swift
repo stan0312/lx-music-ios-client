@@ -27,6 +27,9 @@ final class PlayerManager: ObservableObject {
 
     private var player: AVPlayer?
     private var timeObserver: Any?
+    private var endTimeObserver: NSObjectProtocol?
+    private var pendingSeek: Double?
+    private var lastPersist: Double = 0
     private var lyricTask: Task<Void, Never>?
     private var api: LXAPIClient?
     private var username: String?  // 用于自定义目录流媒体 URL 的 user 参数
@@ -57,6 +60,7 @@ final class PlayerManager: ObservableObject {
         queue = songs
         currentIndex = min(max(startIndex, 0), songs.count - 1)
         loadCurrent()
+        persistState()
     }
 
     func playSong(_ song: Song, in list: [Song]? = nil) {
@@ -79,12 +83,14 @@ final class PlayerManager: ObservableObject {
         guard queue.count > 0 else { return }
         currentIndex = (currentIndex + 1) % queue.count
         loadCurrent()
+        persistState()
     }
 
     func previous() {
         guard queue.count > 0 else { return }
         currentIndex = (currentIndex - 1 + queue.count) % queue.count
         loadCurrent()
+        persistState()
     }
 
     func togglePlayPause() {
@@ -95,6 +101,7 @@ final class PlayerManager: ObservableObject {
     func seek(to time: Double) {
         let cm = CMTime(seconds: time, preferredTimescale: 600)
         player?.seek(to: cm, toleranceBefore: .zero, toleranceAfter: .zero)
+        currentTime = time
     }
 
     func setRate(_ r: Float) {
@@ -145,8 +152,8 @@ final class PlayerManager: ObservableObject {
 
                 // 2. 拉歌词
                 let lrc: String
-                if isCustom {
-                    lrc = (try? await api.customLyric(id: sid, name: song.name, singer: song.singer)) ?? ""
+                if isCustom, let fn = customFilename, let user = username {
+                    lrc = (try? await api.customLyric(filename: fn, user: user)) ?? ""
                 } else {
                     lrc = try await api.lyric(song: Song(
                         id: sid, name: song.name, singer: song.singer, source: song.source,
@@ -162,6 +169,17 @@ final class PlayerManager: ObservableObject {
     }
 
     private func preparePlayer(url: URL) {
+        // 必须先停掉旧播放器并从【旧播放器】移除其观察者，否则移除错误会闪退
+        if let oldPlayer = self.player {
+            if let obs = timeObserver { oldPlayer.removeTimeObserver(obs) }
+            timeObserver = nil
+            oldPlayer.pause()
+        }
+        if let endObs = endTimeObserver {
+            NotificationCenter.default.removeObserver(endObs)
+            endTimeObserver = nil
+        }
+
         let item = AVPlayerItem(url: url)
         let player = AVPlayer(playerItem: item)
         player.volume = volume
@@ -170,8 +188,15 @@ final class PlayerManager: ObservableObject {
         player.play()
         isPlaying = true
 
+        // 恢复上次播放位置
+        if let ps = pendingSeek, ps.isFinite, ps > 0 {
+            player.seek(to: CMTime(seconds: ps, preferredTimescale: 600),
+                        toleranceBefore: .zero, toleranceAfter: .zero)
+            currentTime = ps
+            pendingSeek = nil
+        }
+
         let interval = CMTime(seconds: 0.25, preferredTimescale: 600)
-        if let old = timeObserver { player.removeTimeObserver(old) }
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             guard let self else { return }
             let s = self
@@ -182,16 +207,21 @@ final class PlayerManager: ObservableObject {
                     s.duration = dur
                 }
                 s.updateActiveLyric(at: t)
+                if t - s.lastPersist > 5 {
+                    s.persistState()
+                    s.lastPersist = t
+                }
             }
         }
 
-        NotificationCenter.default.addObserver(
+        let endObs = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main
         ) { [weak self] _ in
             guard let self else { return }
             let s = self
             Task { @MainActor in s.next() }
         }
+        endTimeObserver = endObs
 
         configureRemoteCommands()
         updateNowPlayingInfo()
@@ -229,5 +259,44 @@ final class PlayerManager: ObservableObject {
         info[MPNowPlayingInfoPropertyPlaybackRate] = rate
         info[MPMediaItemPropertyPlaybackDuration] = duration
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    }
+
+    // MARK: - 上次播放记忆（启动自动续播）
+
+    private static let lastKey = "lx.lastQueue"
+
+    private func persistState() {
+        let arr = queue.compactMap { $0.toJSON() }
+        let payload: [String: Any] = ["queue": arr, "index": currentIndex, "time": currentTime]
+        if let data = try? JSONSerialization.data(withJSONObject: payload) {
+            UserDefaults.standard.set(data, forKey: Self.lastKey)
+        }
+    }
+
+    func saveLastTime() {
+        persistState()
+    }
+
+    /// 是否有可恢复的播放状态
+    var hasSavedState: Bool {
+        guard let data = UserDefaults.standard.data(forKey: Self.lastKey),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let arr = obj["queue"] as? [Any] else { return false }
+        return arr.compactMap { Song(json: $0) }.isEmpty == false
+    }
+
+    /// 恢复上次播放并续播
+    func restoreAndPlay() {
+        guard let data = UserDefaults.standard.data(forKey: Self.lastKey),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let arr = obj["queue"] as? [Any] else { return }
+        let songs = arr.compactMap { Song(json: $0) }
+        guard !songs.isEmpty else { return }
+        let idx = min(max((obj["index"] as? Int) ?? 0, 0), songs.count - 1)
+        let t = (obj["time"] as? Double) ?? 0
+        queue = songs
+        currentIndex = idx
+        pendingSeek = t
+        loadCurrent()
     }
 }

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 推荐页（汽水音乐风格首页：搜索入口 + 热搜 + 排行榜）
+/// 推荐页（汽水音乐风格首页：搜索入口 + 热搜 + 排行榜 + 歌单）
 struct HomeView: View {
     @EnvironmentObject var session: AppSession
     @State private var hotSearches: [String] = []
@@ -9,6 +9,12 @@ struct HomeView: View {
     @State private var isLoading = false
     @State private var error: String?
     @State private var path = NavigationPath()
+
+    // 歌单（并入推荐页）
+    @State private var tags: [SongListTag] = []
+    @State private var lists: [SongListInfo] = []
+    @State private var selectedTag: String? = nil
+    @State private var listLoading = false
 
     private let platforms = ["tx", "wy", "kw", "kg", "mg"]
 
@@ -25,6 +31,7 @@ struct HomeView: View {
                     } else {
                         hotSection
                         leaderboardSection
+                        songlistSection
                     }
                 }
                 .padding(.bottom, 30)
@@ -35,6 +42,9 @@ struct HomeView: View {
             }
             .navigationDestination(for: LeaderboardBoard.self) { board in
                 BoardSongListView(board: board)
+            }
+            .navigationDestination(for: SongListInfo.self) { info in
+                SongListDetailView(songList: info)
             }
             .navigationDestination(for: Song.self) { _ in EmptyView() }
         }
@@ -144,6 +154,71 @@ struct HomeView: View {
         }
     }
 
+    /// 歌单（并入推荐页）
+    private var songlistSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "歌单")
+            // 歌单标签
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(tags) { tag in
+                        Button {
+                            selectedTag = tag.name
+                            Task { await loadLists() }
+                        } label: {
+                            Text(tag.name)
+                                .font(.subheadline)
+                                .padding(.horizontal, 14).padding(.vertical, 7)
+                                .background(selectedTag == tag.name ? Color.accentColor : Color(.secondarySystemBackground))
+                                .foregroundColor(selectedTag == tag.name ? .white : .primary)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+            if listLoading {
+                LoadingView().frame(height: 220)
+            } else if lists.isEmpty {
+                Text("暂无歌单").font(.footnote).foregroundColor(.secondary)
+                    .padding(.horizontal, 16)
+            } else {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible())], spacing: 18) {
+                    ForEach(lists) { info in
+                        Button {
+                            path.append(info)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 8) {
+                                ZStack(alignment: .bottomLeading) {
+                                    CoverImage(url: info.cover, width: 170, cornerRadius: 12)
+                                    if let pc = info.playCount, pc > 0 {
+                                        Text("▶ \(info.playCountText)")
+                                            .font(.caption2)
+                                            .padding(4)
+                                            .background(.black.opacity(0.45))
+                                            .foregroundColor(.white)
+                                            .clipShape(Capsule())
+                                            .padding(6)
+                                    }
+                                }
+                                .frame(width: 170, height: 170, alignment: .top)
+                                Text(info.name)
+                                    .font(.subheadline).fontWeight(.medium).foregroundColor(.primary)
+                                    .lineLimit(2, reservesSpace: true)
+                                if let c = info.creator {
+                                    Text(c).font(.caption).foregroundColor(.secondary).lineLimit(1)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+        }
+    }
+
     private func load() async {
         isLoading = true
         error = nil
@@ -152,12 +227,24 @@ struct HomeView: View {
         hotSearches = hs
         boards = bs
         isLoading = false
+        if tags.isEmpty {
+            tags = (try? await session.api?.songListTags()) ?? []
+        }
+        await loadLists()
     }
 
     private func loadBoards() async {
         if let b = try? await session.api?.leaderboardBoards(platform: platform) {
             boards = b
         }
+    }
+
+    private func loadLists() async {
+        listLoading = true
+        if let l = try? await session.api?.songListList(tag: selectedTag, page: 1) {
+            lists = l
+        }
+        listLoading = false
     }
 }
 

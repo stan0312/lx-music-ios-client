@@ -28,8 +28,6 @@ struct RootView: View {
             TabView {
                 HomeView()
                     .tabItem { Label("推荐", systemImage: "music.note.house.fill") }
-                SongListPlazaView()
-                    .tabItem { Label("歌单", systemImage: "music.note.list") }
                 MineView()
                     .tabItem { Label("我的", systemImage: "person.fill") }
             }
@@ -47,6 +45,16 @@ struct RootView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(10)
             }
+        }
+        .onAppear { autoResumeOnLaunch() }
+    }
+
+    /// 启动即播放：恢复到上次歌曲并打开播放页（汽水音乐风格）
+    private func autoResumeOnLaunch() {
+        guard session.isLoggedIn, player.currentSong == nil, player.hasSavedState else { return }
+        player.restoreAndPlay()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            withAnimation(.easeInOut(duration: 0.3)) { showFullPlayer = true }
         }
     }
 }

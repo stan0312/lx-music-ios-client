@@ -411,18 +411,46 @@ final class LXAPIClient {
         try url("/api/music/custom/cover", query: ["filename": filename, "user": user, "token": token])
     }
 
-    /// 自定义目录歌曲的歌词（best-effort，取服务端本地 .lrc 缓存）
-    func customLyric(id: String, name: String, singer: String) async throws -> String {
-        let obj: Any = try await request(try url("/api/music/lyric",
-                                                 query: ["source": "custom", "songmid": id,
-                                                         "name": name, "singer": singer]))
-        if let s = obj as? String, !s.isEmpty { return s }
-        if let d = obj as? [String: Any] {
-            if let lrc = d["lrc"] as? String, !lrc.isEmpty { return lrc }
-            if let data = d["data"] as? String, !data.isEmpty { return data }
-            if let data = d["data"] as? [String: Any], let lrc = data["lrc"] as? String { return lrc }
+    /// 自定义目录歌曲的歌词：
+    /// 1) 优先读音频内嵌歌词（GET /api/music/custom/embedLyric）
+    /// 2) 取不到则尝试读取同目录外部 .lrc 文件
+    func customLyric(filename: String, user: String) async throws -> String {
+        // 1. 内嵌歌词
+        if let u = try? customEmbedLyricURL(filename: filename, user: user) {
+            if let d = try? await request(u) as? [String: Any],
+               let lrc = d["lrc"] as? String, !lrc.isEmpty {
+                return lrc
+            }
+        }
+        // 2. 外部 .lrc（把音频扩展名换成 .lrc）
+        let lrcRel = filename.components(separatedBy: ".")
+        let lrcPath = lrcRel.count > 1
+            ? (lrcRel.dropLast().joined(separator: ".") + ".lrc")
+            : filename + ".lrc"
+        if let u = try? customFileURL(filename: lrcPath, user: user) {
+            if let raw = try? await rawGet(u), !raw.isEmpty, raw.contains("["), raw.contains("]") {
+                return raw
+            }
         }
         return ""
+    }
+
+    /// 读取音频内嵌歌词的地址
+    func customEmbedLyricURL(filename: String, user: String) throws -> URL {
+        try url("/api/music/custom/embedLyric",
+               query: ["filename": filename, "user": user, "token": token])
+    }
+
+    /// 取原始文本响应（用于读取 .lrc 等非 JSON 内容）
+    private func rawGet(_ url: URL) async throws -> String {
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        if !token.isEmpty { req.setValue(token, forHTTPHeaderField: "x-user-token") }
+        let (data, resp) = try await session.data(for: req)
+        guard let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw LXError.http((resp as? HTTPURLResponse)?.statusCode ?? -1, "")
+        }
+        return String(data: data, encoding: .utf8) ?? ""
     }
 
     // MARK: - 快照备份

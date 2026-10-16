@@ -90,6 +90,9 @@ struct Song: Identifiable, Hashable {
         guard let rawName = stringValue(deepGet(d, ["name"])), !rawName.isEmpty else { return nil }
 
         var sid = stringValue(deepGet(d, ["id"]))
+        // lxserver 榜单/歌单详情常用 songmid/songId 作为标识，需兜底
+        if sid == nil { sid = stringValue(deepGet(d, ["songmid"])) }
+        if sid == nil { sid = stringValue(deepGet(d, ["songId"])) }
         // id 可能是数组（多 id 优先第一个）
         if sid == nil, let arr = arrayValue(d["id"]) {
             sid = arr.first.flatMap(stringValue)
@@ -98,7 +101,11 @@ struct Song: Identifiable, Hashable {
 
         self.id = id
         self.name = rawName
-        self.singer = stringValue(deepGet(d, ["singer"])) ?? stringValue(deepGet(d, ["artist"])) ?? "未知歌手"
+        if let singerArr = d["singer"] as? [Any] {
+            self.singer = singerArr.compactMap(stringValue).joined(separator: " / ")
+        } else {
+            self.singer = stringValue(deepGet(d, ["singer"])) ?? stringValue(deepGet(d, ["artist"])) ?? "未知歌手"
+        }
         self.source = stringValue(deepGet(d, ["source"])) ?? "tx"
         self.albumName = stringValue(deepGet(d, ["albumName"])) ?? stringValue(deepGet(d, ["album"]))
         // 封面图多路径
@@ -108,6 +115,20 @@ struct Song: Identifiable, Hashable {
         self.size = stringValue(deepGet(d, ["size"]))
         self.lrc = stringValue(deepGet(d, ["lrc"]))
         self.url = stringValue(deepGet(d, ["url"]))
+        self.customFilename = stringValue(deepGet(d, ["customFilename"]))
+    }
+
+    /// 持久化用
+    func toJSON() -> [String: Any] {
+        var d: [String: Any] = [
+            "id": id, "name": name, "singer": singer, "source": source,
+        ]
+        if let albumName { d["albumName"] = albumName }
+        if let albumPic { d["albumPic"] = albumPic }
+        if let interval { d["interval"] = interval }
+        if let quality { d["quality"] = quality }
+        if let customFilename { d["customFilename"] = customFilename }
+        return d
     }
 
     private func firstPic(_ d: [String: Any]) -> String? {
