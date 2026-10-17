@@ -96,6 +96,13 @@ final class PlayerManager: ObservableObject {
         persistState()
     }
 
+    /// 取队列中任意下标对应的歌（越界自动回绕；空队列返回 nil）
+    func songAt(_ index: Int) -> Song? {
+        guard !queue.isEmpty else { return nil }
+        let n = queue.count
+        return queue[((index % n) + n) % n]
+    }
+
     func togglePlayPause() {
         guard player != nil else { return }
         if isPlaying {

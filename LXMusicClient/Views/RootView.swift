@@ -5,6 +5,7 @@ struct RootView: View {
     @EnvironmentObject var player: PlayerManager
     @State private var showFullPlayer = false
     @State private var showQueue = false
+    @State private var selectedTab = 0
 
     var body: some View {
         Group {
@@ -25,11 +26,13 @@ struct RootView: View {
 
     private var main: some View {
         ZStack(alignment: .bottom) {
-            TabView {
+            TabView(selection: $selectedTab) {
                 HomeView()
                     .tabItem { Label("推荐", systemImage: "music.note.house.fill") }
+                    .tag(0)
                 MineView()
                     .tabItem { Label("我的", systemImage: "person.fill") }
+                    .tag(1)
             }
             .tint(.accentColor)
 
@@ -41,7 +44,11 @@ struct RootView: View {
         }
         .overlay {
             if showFullPlayer {
-                FullPlayerView(onClose: { showFullPlayer = false })
+                FullPlayerView(onClose: { showFullPlayer = false },
+                                onNavigate: { tab in
+                                    selectedTab = tab
+                                    showFullPlayer = false
+                                })
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(10)
             }

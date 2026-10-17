@@ -12,7 +12,8 @@ struct MiniPlayerView: View {
             HStack(spacing: 12) {
                 Button(action: onTap) {
                     HStack(spacing: 12) {
-                        CoverImage(url: player.currentSong?.albumPic, width: 44, cornerRadius: 8)
+                        CoverImage(url: player.currentSong?.albumPic, width: 44, cornerRadius: 8,
+                                   fallbackTitle: player.currentSong?.name ?? "")
                         VStack(alignment: .leading, spacing: 2) {
                             Text(player.currentSong?.name ?? "")
                                 .font(.subheadline.weight(.medium))
@@ -49,14 +50,72 @@ struct MiniPlayerView: View {
     }
 }
 
+/// 纵向翻页切歌（仿真一页一页上下翻动）
+/// 跟随手指位移，松手后弹跳到上一首/下一首。
+struct CoverPager: View {
+    @EnvironmentObject var player: PlayerManager
+    @State private var dragOffset: CGFloat = 0
+
+    private let size: CGFloat = 264
+    private let spacing: CGFloat = 14
+
+    var body: some View {
+        ZStack {
+            if dragOffset < 0, let ns = player.songAt(player.currentIndex + 1) {
+                page(song: ns)
+                    .scaleEffect(0.9)
+                    .offset(y: size + spacing + dragOffset)
+            } else if dragOffset > 0, let ps = player.songAt(player.currentIndex - 1) {
+                page(song: ps)
+                    .scaleEffect(0.9)
+                    .offset(y: -(size + spacing) + dragOffset)
+            }
+            if let cs = player.currentSong {
+                page(song: cs)
+                    .offset(y: dragOffset)
+            }
+        }
+        .frame(height: size + spacing)
+        .clipped()
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 12)
+                .onChanged { v in dragOffset = v.translation.height }
+                .onEnded { v in
+                    let dy = v.translation.height
+                    if dy < -60 { commit(toNext: true) }
+                    else if dy > 60 { commit(toNext: false) }
+                    else { withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { dragOffset = 0 } }
+                }
+        )
+        .onChange(of: player.currentIndex) { _ in dragOffset = 0 }
+    }
+
+    private func commit(toNext: Bool) {
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+            dragOffset = toNext ? -(size + spacing) : (size + spacing)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) {
+            if toNext { player.next() } else { player.previous() }
+            dragOffset = 0
+        }
+    }
+
+    private func page(song: Song) -> some View {
+        CoverImage(url: song.albumPic, width: size, cornerRadius: 20, fallbackTitle: song.name)
+            .shadow(color: .black.opacity(0.5), radius: 24, y: 14)
+    }
+}
+
 /// 全屏播放页（汽水音乐风格）
-/// 顶栏：收起 + 标题 + 搜索；封面取色背景、上下滑切歌、点封面切歌词；
-/// 底部：喜欢 / 评论 / 定时 / 三点菜单（删除、不喜欢），进度条，中间播放暂停。
+/// 中部：封面纵向翻页切歌 / 点击“歌词”进入歌词页；背景取封面氛围色；
+/// 底部：喜欢 / 评论 / 定时 / 三点菜单 → 进度条 → 播放暂停 → 底部导航（推荐 | 我的）。
 struct FullPlayerView: View {
     @EnvironmentObject var player: PlayerManager
     @EnvironmentObject var session: AppSession
     var onClose: () -> Void = {}
-    @State private var showLyrics = true
+    var onNavigate: ((Int) -> Void)? = nil
+    @State private var showLyricsPage = false
     @State private var showComment = false
     @State private var showSearch = false
     @State private var bgColor: Color = .accentColor
@@ -68,15 +127,14 @@ struct FullPlayerView: View {
             background
             VStack(spacing: 0) {
                 topBar
-                Spacer(minLength: 10)
-                coverView
-                    .gesture(verticalSwipe)
-                Spacer(minLength: 14)
-                if showLyrics { lyricsView }
+                Spacer(minLength: 6)
+                centralArea
+                Spacer(minLength: 4)
                 songMeta
                 actionRow
                 progressBar
                 playRow
+                bottomTabBar
             }
         }
         .preferredColorScheme(.dark)
@@ -108,24 +166,28 @@ struct FullPlayerView: View {
         }
     }
 
-    /// 上下滑切歌（上一首 / 下一首）
-    private var verticalSwipe: some Gesture {
-        DragGesture(minimumDistance: 30)
-            .onEnded { value in
-                let dy = value.translation.height
-                if dy < -60 { player.next() }
-                else if dy > 60 { player.previous() }
+    /// 中部：封面翻页 或 歌词页（点击“歌词”进入）
+    private var centralArea: some View {
+        ZStack {
+            if showLyricsPage {
+                lyricsPage.transition(.opacity)
+            } else {
+                CoverPager()
+                    .transition(.opacity)
+                    .onTapGesture { withAnimation(.easeInOut(duration: 0.25)) { showLyricsPage = true } }
             }
+        }
+        .animation(.easeInOut(duration: 0.25), value: showLyricsPage)
     }
 
     private var background: some View {
         GeometryReader { geo in
             ZStack {
                 Color(.systemBackground)
-                LinearGradient(colors: [bgColor.opacity(0.85), bgColor.opacity(0.55), .black],
+                LinearGradient(colors: [bgColor.opacity(0.9), bgColor.opacity(0.55), .black],
                                startPoint: .top, endPoint: .bottom)
             }
-            .overlay(Color.black.opacity(0.22))
+            .overlay(Color.black.opacity(0.2))
             .ignoresSafeArea()
         }
     }
@@ -149,40 +211,25 @@ struct FullPlayerView: View {
             .buttonStyle(.plain)
         }
         .padding(.horizontal, 16)
-        .padding(.top, 10)
+        .padding(.top, 8)
     }
 
-    private var coverView: some View {
-        VStack(spacing: 8) {
-            CoverImage(url: player.currentSong?.albumPic, width: 268, cornerRadius: 20)
-                .shadow(color: .black.opacity(0.5), radius: 24, y: 14)
-            Text(showLyrics ? "轻点封面查看歌词" : "轻点封面查看封面")
-                .font(.caption2).foregroundColor(.white.opacity(0.55))
-                .padding(.top, 4)
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            withAnimation(.easeInOut(duration: 0.25)) { showLyrics.toggle() }
-        }
-    }
-
-    private var lyricsView: some View {
+    private var lyricsPage: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 18) {
+                LazyVStack(spacing: 22) {
                     ForEach(Array(player.lyrics.enumerated()), id: \.element.id) { idx, line in
                         Text(line.text.isEmpty ? " " : line.text)
                             .font(.system(.body, design: .rounded))
-                            .foregroundColor(idx == player.activeLyricIndex ? .white : .white.opacity(0.45))
+                            .foregroundColor(idx == player.activeLyricIndex ? .white : .white.opacity(0.4))
                             .fontWeight(idx == player.activeLyricIndex ? .semibold : .regular)
                             .id(idx)
                             .frame(maxWidth: .infinity)
                     }
                 }
-                .padding(.vertical, 8)
-                .padding(.horizontal, 24)
+                .padding(.vertical, 10).padding(.horizontal, 28)
             }
-            .frame(maxHeight: 150)
+            .frame(height: 300)
             .onChange(of: player.activeLyricIndex) { idx in
                 if idx >= 0 { withAnimation(.easeInOut(duration: 0.3)) { proxy.scrollTo(idx, anchor: .center) } }
             }
@@ -202,6 +249,14 @@ struct FullPlayerView: View {
             Text(player.currentSong?.singer ?? "")
                 .font(.subheadline).foregroundColor(.white.opacity(0.8)).lineLimit(1)
             HStack(spacing: 6) {
+                Button { withAnimation(.easeInOut(duration: 0.25)) { showLyricsPage.toggle() } } label: {
+                    Label(showLyricsPage ? "封面" : "歌词", systemImage: showLyricsPage ? "photo" : "text.quote")
+                        .font(.system(size: 11, weight: .semibold))
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(.white.opacity(0.18)).foregroundColor(.white)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
                 if let q = player.currentSong?.quality, !q.isEmpty {
                     Text(q).font(.system(size: 10, weight: .semibold))
                         .padding(.horizontal, 6).padding(.vertical, 2)
@@ -215,7 +270,7 @@ struct FullPlayerView: View {
                     .clipShape(Capsule())
             }
         }
-        .padding(.top, 8)
+        .padding(.top, 6)
     }
 
     /// 喜欢 / 评论 / 定时 / 三点菜单
@@ -262,7 +317,7 @@ struct FullPlayerView: View {
             }
         }
         .padding(.horizontal, 18)
-        .padding(.top, 10)
+        .padding(.top, 8)
     }
 
     private var currentSongIsLiked: Bool {
@@ -317,22 +372,45 @@ struct FullPlayerView: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.top, 8)
+        .padding(.top, 6)
     }
 
-    /// 主控制：中间播放 / 暂停（无左右切歌按钮）
+    /// 主控制：中间播放 / 暂停（位于底部导航之上，与汽水音乐高度一致）
     private var playRow: some View {
         HStack {
             Spacer()
             Button { player.togglePlayPause() } label: {
                 Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 62)).foregroundColor(.white)
+                    .font(.system(size: 60)).foregroundColor(.white)
             }
             .buttonStyle(.plain)
             Spacer()
         }
         .padding(.top, 2)
-        .padding(.bottom, 14)
+        .padding(.bottom, 6)
+    }
+
+    /// 底部导航：推荐（左） | 我的（右）
+    private var bottomTabBar: some View {
+        HStack {
+            tabButton(index: 0, title: "推荐", icon: "music.note.house.fill")
+            Spacer()
+            tabButton(index: 1, title: "我的", icon: "person.fill")
+        }
+        .padding(.horizontal, 56)
+        .padding(.vertical, 4)
+        .background(GlassBackground())
+    }
+
+    private func tabButton(index: Int, title: String, icon: String) -> some View {
+        Button { onNavigate?(index) } label: {
+            VStack(spacing: 3) {
+                Image(systemName: icon).font(.system(size: 22))
+                Text(title).font(.caption2)
+            }
+            .foregroundColor(.white.opacity(0.9))
+        }
+        .buttonStyle(.plain)
     }
 
     private func imageWithLabel(_ icon: String, _ label: String) -> some View {
@@ -348,13 +426,22 @@ struct FullPlayerView: View {
         return String(format: "%02d:%02d", s / 60, s % 60)
     }
 
+    /// 背景氛围色：优先取封面主色，无封面时用歌名生成的氛围色
     private func extractDominantColor() {
-        guard let pic = player.currentSong?.albumPic, let u = URL(string: pic) else { return }
+        guard let song = player.currentSong else { return }
+        let fallback = Color(hue: hueFrom(song.name), saturation: 0.72, brightness: 0.6)
+        guard let pic = song.albumPic, let u = URL(string: pic) else {
+            bgColor = fallback
+            return
+        }
         Task.detached(priority: .utility) {
-            guard let data = try? Data(contentsOf: u),
-                  let img = UIImage(data: data),
-                  let avg = UIImage.averageColor(img) else { return }
-            DispatchQueue.main.async { bgColor = Color(uiColor: avg) }
+            if let data = try? Data(contentsOf: u),
+               let img = UIImage(data: data),
+               let avg = UIImage.averageColor(img) {
+                DispatchQueue.main.async { bgColor = Color(uiColor: avg) }
+            } else {
+                DispatchQueue.main.async { bgColor = fallback }
+            }
         }
     }
 
@@ -445,7 +532,7 @@ struct DownloadSheet: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 18) {
-                CoverImage(url: song?.albumPic, width: 140, cornerRadius: 16)
+                CoverImage(url: song?.albumPic, width: 140, cornerRadius: 16, fallbackTitle: song?.name ?? "")
                 Text(song?.name ?? "").font(.headline)
                 Text(song?.singer ?? "").font(.subheadline).foregroundColor(.secondary)
                 if done {

@@ -1,15 +1,17 @@
 import SwiftUI
 
-// MARK: - 封面图（兼容 http 内网地址）
+// MARK: - 封面图（兼容 http 内网地址；无图时用歌名生成氛围渐变兜底）
 struct CoverImage: View {
     let url: String?
     let width: CGFloat
     let cornerRadius: CGFloat
+    let fallbackTitle: String
 
-    init(url: String?, width: CGFloat, cornerRadius: CGFloat = 10) {
+    init(url: String?, width: CGFloat, cornerRadius: CGFloat = 10, fallbackTitle: String = "") {
         self.url = url
         self.width = width
         self.cornerRadius = cornerRadius
+        self.fallbackTitle = fallbackTitle
     }
 
     var body: some View {
@@ -20,29 +22,53 @@ struct CoverImage: View {
                     case .success(let img):
                         img.resizable().scaledToFill()
                     case .failure:
-                        placeholder
+                        fallback
                     default:
-                        placeholder.opacity(0.6)
+                        fallback.opacity(0.6)
                     }
                 }
             } else {
-                placeholder
+                fallback
             }
         }
         .frame(width: width, height: width)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 
-    private var placeholder: some View {
-        ZStack {
-            LinearGradient(
-                colors: [Color.gray.opacity(0.25), Color.gray.opacity(0.12)],
-                startPoint: .topLeading, endPoint: .bottomTrailing
-            )
-            Image(systemName: "music.note")
-                .font(.system(size: width * 0.3, weight: .light))
-                .foregroundColor(.white.opacity(0.7))
+    @ViewBuilder private var fallback: some View {
+        if fallbackTitle.isEmpty {
+            ZStack {
+                LinearGradient(
+                    colors: [Color.gray.opacity(0.25), Color.gray.opacity(0.12)],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
+                Image(systemName: "music.note")
+                    .font(.system(size: width * 0.3, weight: .light))
+                    .foregroundColor(.white.opacity(0.7))
+            }
+        } else {
+            gradientFallback(title: fallbackTitle, width: width)
         }
+    }
+}
+
+/// 由字符串确定性生成色相（0...1），保证同名歌曲恒定同色
+func hueFrom(_ s: String) -> CGFloat {
+    var h: UInt64 = 5381
+    for b in s.utf8 { h = (h &* 33) &+ UInt64(b) }
+    return CGFloat(h % 360) / 360
+}
+
+/// 歌名生成的氛围渐变封面（汽水音乐式：无内嵌封面时自动补一张）
+func gradientFallback(title: String, width: CGFloat) -> some View {
+    let hue = hueFrom(title)
+    let c1 = Color(hue: hue, saturation: 0.72, brightness: 0.82)
+    let c2 = Color(hue: (hue + 0.12).truncatingRemainder(dividingBy: 1), saturation: 0.72, brightness: 0.55)
+    return ZStack {
+        LinearGradient(colors: [c1, c2], startPoint: .topLeading, endPoint: .bottomTrailing)
+        Text(String(title.prefix(1)).uppercased())
+            .font(.system(size: width * 0.32, weight: .bold))
+            .foregroundColor(.white.opacity(0.9))
     }
 }
 
