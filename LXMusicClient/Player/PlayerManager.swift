@@ -20,6 +20,7 @@ final class PlayerManager: ObservableObject {
     @Published var showingMiniError = false
     @Published var playError: String?
     @Published var sleepRemaining: TimeInterval?   // 播放自动停止倒计时（nil = 关闭）
+    @Published var currentLyricOffset: Double = 0   // 当前歌曲歌词偏移（秒）
 
     var currentSong: Song? {
         guard queue.indices.contains(currentIndex) else { return nil }
@@ -214,6 +215,7 @@ final class PlayerManager: ObservableObject {
         // 清歌词
         lyrics = []
         activeLyricIndex = -1
+        currentLyricOffset = lyricOffset(for: song)
         lyricTask?.cancel()
 
         let api = self.api
@@ -323,11 +325,53 @@ final class PlayerManager: ObservableObject {
 
     private func updateActiveLyric(at time: Double) {
         guard !lyrics.isEmpty else { activeLyricIndex = -1; return }
+        // 应用歌词偏移：offset>0 时按“更晚的播放时间”匹配 → 当前句提前高亮（歌词前移）
+        let adjusted = time + currentLyricOffset
         var idx = 0
         for (i, line) in lyrics.enumerated() {
-            if line.time <= time + 0.3 { idx = i }
+            if line.time <= adjusted + 0.3 { idx = i }
         }
         activeLyricIndex = idx
+    }
+
+    // MARK: - 歌词偏移（按歌本地记忆，不写回歌词文件）
+
+    private static let lyricOffsetKey = "lx.lyricOffsets"
+    private var lyricOffsets: [String: Double] = {
+        guard let d = UserDefaults.standard.data(forKey: PlayerManager.lyricOffsetKey),
+              let arr = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return [:] }
+        var map: [String: Double] = [:]
+        for (k, v) in arr {
+            if let n = v as? Double { map[k] = n }
+            else if let n = v as? Int { map[k] = Double(n) }
+        }
+        return map
+    }()
+
+    func lyricOffset(for song: Song) -> Double {
+        lyricOffsets[song.id] ?? 0
+    }
+
+    func setLyricOffset(_ offset: Double, for song: Song) {
+        lyricOffsets[song.id] = offset
+        if let data = try? JSONSerialization.data(withJSONObject: lyricOffsets) {
+            UserDefaults.standard.set(data, forKey: PlayerManager.lyricOffsetKey)
+        }
+        if song.id == currentSong?.id {
+            currentLyricOffset = offset
+        }
+    }
+
+    /// 歌词前移（offset +step 秒）→ 当前句提前高亮
+    func shiftLyricForward(step: Double = 0.5) {
+        guard let song = currentSong else { return }
+        setLyricOffset(min(max(currentLyricOffset + step, -10), 10), for: song)
+    }
+
+    /// 歌词后移（offset -step 秒）
+    func shiftLyricBackward(step: Double = 0.5) {
+        guard let song = currentSong else { return }
+        setLyricOffset(min(max(currentLyricOffset - step, -10), 10), for: song)
     }
 
     // MARK: - 锁屏控制

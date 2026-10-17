@@ -254,34 +254,84 @@ struct FullPlayerView: View {
         .padding(.top, 6)
     }
 
-    /// 歌词页（点击返回主界面）
+    /// 歌词页（点击返回主界面；右下角可前后微调歌词偏移）
     private var lyricsPage: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 24) {
-                    ForEach(Array(player.lyrics.enumerated()), id: \.element.id) { idx, line in
-                        Text(line.text.isEmpty ? " " : line.text)
-                            .font(.system(.body, design: .rounded))
-                            .foregroundColor(idx == player.activeLyricIndex ? .white : .white.opacity(0.4))
-                            .fontWeight(idx == player.activeLyricIndex ? .semibold : .regular)
-                            .id(idx)
-                            .frame(maxWidth: .infinity)
+        ZStack {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 24) {
+                        ForEach(Array(player.lyrics.enumerated()), id: \.element.id) { idx, line in
+                            Text(line.text.isEmpty ? " " : line.text)
+                                .font(.system(.body, design: .rounded))
+                                .foregroundColor(idx == player.activeLyricIndex ? .white : .white.opacity(0.4))
+                                .fontWeight(idx == player.activeLyricIndex ? .semibold : .regular)
+                                .id(idx)
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .padding(.vertical, 12).padding(.horizontal, 30)
+                }
+                .onChange(of: player.activeLyricIndex) { idx in
+                    if idx >= 0 { withAnimation(.easeInOut(duration: 0.3)) { proxy.scrollTo(idx, anchor: .center) } }
+                }
+                .overlay {
+                    if player.lyrics.isEmpty {
+                        Text("暂无歌词").font(.footnote).foregroundColor(.white.opacity(0.5))
                     }
                 }
-                .padding(.vertical, 12).padding(.horizontal, 30)
             }
-            .onChange(of: player.activeLyricIndex) { idx in
-                if idx >= 0 { withAnimation(.easeInOut(duration: 0.3)) { proxy.scrollTo(idx, anchor: .center) } }
-            }
-            .overlay {
-                if player.lyrics.isEmpty {
-                    Text("暂无歌词").font(.footnote).foregroundColor(.white.opacity(0.5))
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+            .onTapGesture { withAnimation(.easeInOut(duration: 0.25)) { showLyricsPage = false } }
+
+            // 右下角：歌词前移 / 后移（按歌本地记忆偏移）
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    lyricOffsetControl
                 }
             }
+            .padding(.trailing, 16)
+            .padding(.bottom, 16)
         }
-        .frame(maxWidth: .infinity)
-        .contentShape(Rectangle())
-        .onTapGesture { withAnimation(.easeInOut(duration: 0.25)) { showLyricsPage = false } }
+    }
+
+    /// 歌词微调控件：〈 −0.5s | 当前偏移 | +0.5s 〉
+    private var lyricOffsetControl: some View {
+        HStack(spacing: 10) {
+            Button { player.shiftLyricBackward() } label: {
+                Image(systemName: "lessthan")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 30, height: 30)
+                    .background(.white.opacity(0.16))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+
+            Text(lyricOffsetText)
+                .font(.caption.monospacedDigit())
+                .foregroundColor(.white.opacity(0.85))
+                .frame(minWidth: 64)
+                .onTapGesture { player.setLyricOffset(0, for: player.currentSong ?? Song(id: "x", name: "", singer: "", source: "custom")) }
+
+            Button { player.shiftLyricForward() } label: {
+                Image(systemName: "greaterthan")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 30, height: 30)
+                    .background(.white.opacity(0.16))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var lyricOffsetText: String {
+        let v = player.currentLyricOffset
+        if v == 0 { return "0s" }
+        return String(format: "%+.1fs", v)
     }
 
     /// 喜欢 / 评论 / 定时 / 三点菜单
