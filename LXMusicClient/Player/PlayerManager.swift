@@ -136,9 +136,15 @@ final class PlayerManager: ObservableObject {
 
     // MARK: - 播放自动停止（睡眠定时器，本地）
 
+    /// 点按递增的档位：30 分钟 → 1 小时 → 1.5 小时 → 2 小时
+    static let sleepSteps: [Int] = [30, 60, 90, 120]
+    /// 当前激活的定时档位（分钟），nil = 未开启
+    @Published var activeSleepMinutes: Int? = nil
+
     func startSleepTimer(minutes: Int) {
         sleepTask?.cancel()
-        guard minutes > 0 else { sleepRemaining = nil; return }
+        guard minutes > 0 else { sleepRemaining = nil; activeSleepMinutes = nil; return }
+        activeSleepMinutes = minutes
         sleepRemaining = TimeInterval(minutes * 60)
         let target = Date().addingTimeInterval(sleepRemaining!)
         sleepTask = Task { @MainActor [weak self] in
@@ -150,6 +156,7 @@ final class PlayerManager: ObservableObject {
                     self.player?.pause()
                     self.isPlaying = false
                     self.sleepRemaining = nil
+                    self.activeSleepMinutes = nil
                     return
                 }
                 self.sleepRemaining = left
@@ -158,10 +165,20 @@ final class PlayerManager: ObservableObject {
         }
     }
 
+    /// 点按一次：按 30 → 60 → 90 → 120 分钟递进（超过 120 回到 30）
+    func stepSleepTimer() {
+        var next = Self.sleepSteps[0]
+        if let cur = activeSleepMinutes, let i = Self.sleepSteps.firstIndex(of: cur) {
+            next = Self.sleepSteps[(i + 1) % Self.sleepSteps.count]
+        }
+        startSleepTimer(minutes: next)
+    }
+
     func cancelSleepTimer() {
         sleepTask?.cancel()
         sleepTask = nil
         sleepRemaining = nil
+        activeSleepMinutes = nil
     }
 
     // MARK: - 喜欢（本地收藏，按歌曲 id 记忆）

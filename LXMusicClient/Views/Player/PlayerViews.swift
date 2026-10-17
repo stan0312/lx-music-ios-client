@@ -351,15 +351,11 @@ struct FullPlayerView: View {
             .buttonStyle(.plain)
 
             Spacer()
-            Menu {
-                Button("关闭定时", action: { player.cancelSleepTimer() })
-                Divider()
-                Button("15 分钟") { player.startSleepTimer(minutes: 15) }
-                Button("30 分钟") { player.startSleepTimer(minutes: 30) }
-                Button("60 分钟") { player.startSleepTimer(minutes: 60) }
-            } label: {
-                imageWithLabel("clock", sleepTimerText).foregroundColor(.white.opacity(0.85))
-            }
+            imageWithLabel("clock", sleepTimerText)
+                .foregroundColor(player.activeSleepMinutes == nil ? .white.opacity(0.85) : .yellow)
+                .contentShape(Rectangle())
+                .onTapGesture { player.stepSleepTimer() }
+                .onLongPressGesture(minimumDuration: 0.6) { player.cancelSleepTimer() }
 
             Spacer()
             Menu {
