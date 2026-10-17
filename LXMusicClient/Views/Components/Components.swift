@@ -1,5 +1,53 @@
 import SwiftUI
 
+// MARK: - 可靠封面加载（URLSession + 磁盘缓存，替换 AsyncImage 解决 LAN 封面加载不稳定）
+struct RemoteImage: View {
+    let url: URL?
+    var fallback: AnyView?
+
+    @State private var ui: UIImage?
+    @State private var loading = true
+
+    var body: some View {
+        Group {
+            if let ui {
+                Image(uiImage: ui).resizable().scaledToFill()
+            } else if loading {
+                ZStack {
+                    Color.gray.opacity(0.12)
+                    ProgressView().tint(.white.opacity(0.6))
+                }
+            } else {
+                fallback ?? AnyView(EmptyView())
+            }
+        }
+        .task(id: url?.absoluteString) { load() }
+    }
+
+    private func load() {
+        guard let url else { loading = false; ui = nil; return }
+        let req = URLRequest(url: url)
+        if let cached = URLCache.shared.cachedResponse(for: req)?.data,
+           let img = UIImage(data: cached) {
+            ui = img; loading = false
+            return
+        }
+        loading = true
+        URLSession.shared.dataTask(with: req) { data, resp, err in
+            DispatchQueue.main.async {
+                loading = false
+                if let data, let img = UIImage(data: data) {
+                    ui = img
+                    if let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode) {
+                        URLCache.shared.storeCachedResponse(
+                            CachedURLResponse(response: http, data: data), for: req)
+                    }
+                }
+            }
+        }.resume()
+    }
+}
+
 // MARK: - 封面图（兼容 http 内网地址；无图时用歌名生成氛围渐变兜底）
 struct CoverImage: View {
     let url: String?
@@ -17,16 +65,7 @@ struct CoverImage: View {
     var body: some View {
         Group {
             if let url, let u = URL(string: url) {
-                AsyncImage(url: u, transaction: Transaction(animation: .easeOut)) { phase in
-                    switch phase {
-                    case .success(let img):
-                        img.resizable().scaledToFill()
-                    case .failure:
-                        fallback
-                    default:
-                        fallback.opacity(0.6)
-                    }
-                }
+                RemoteImage(url: u, fallback: AnyView(fallback))
             } else {
                 fallback
             }

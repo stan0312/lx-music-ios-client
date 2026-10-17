@@ -279,14 +279,25 @@ final class LXAPIClient {
         return ""
     }
 
-    func comment(song: Song, type: String = "hot", page: Int = 1) async throws -> [SongComment] {
-        let songInfo: [String: Any] = [
+    func comment(song: Song, type: String = "hot", page: Int = 1, limit: Int = 20) async throws -> [SongComment] {
+        var songInfo: [String: Any] = [
             "id": song.id, "name": song.name, "singer": song.singer, "source": song.source,
+            "songmid": song.id,
         ]
-        let body: [String: Any] = ["songInfo": songInfo, "type": type, "page": page]
+        if let interval = song.interval { songInfo["interval"] = interval }
+        let body: [String: Any] = ["songInfo": songInfo, "type": type, "page": page, "limit": limit]
         let obj: Any = try await request(try url("/api/music/comment"), method: "POST", body: body)
-        if let d = obj as? [String: Any], let arr = arrayValue(d["list"] ?? d["data"] ?? d["comments"]) {
-            return arr.compactMap { SongComment(json: $0) }
+        if let d = obj as? [String: Any] {
+            for key in ["comments", "list", "data"] {
+                if let arr = arrayValue(d[key]) {
+                    let cs = arr.compactMap { SongComment(json: $0) }
+                    if !cs.isEmpty { return cs }
+                }
+            }
+            if let data = d["data"] as? [String: Any],
+               let arr = arrayValue(data["comments"]) {
+                return arr.compactMap { SongComment(json: $0) }
+            }
         }
         if let arr = obj as? [Any] { return arr.compactMap { SongComment(json: $0) } }
         return []
