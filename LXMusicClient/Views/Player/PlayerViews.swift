@@ -101,7 +101,7 @@ struct PlayerPager: View {
     private func block(song: Song) -> some View {
         VStack(spacing: 0) {
             Spacer(minLength: 4)
-            CoverImage(url: song.albumPic, width: 248, cornerRadius: 20, fallbackTitle: song.name)
+            CoverImage(url: song.albumPic, width: 300, cornerRadius: 22, fallbackTitle: song.name)
                 .shadow(color: .black.opacity(0.5), radius: 24, y: 14)
             Spacer(minLength: 12)
             if song.id == player.currentSong?.id {
@@ -141,27 +141,26 @@ struct PlayerPager: View {
     }
 
     private func songMetaText(song: Song) -> some View {
-        VStack(spacing: 6) {
-            Text(song.name)
-                .font(.system(.title2, design: .rounded)).bold().foregroundColor(.white)
-                .lineLimit(1)
-            Text(song.singer)
-                .font(.subheadline).foregroundColor(.white.opacity(0.8)).lineLimit(1)
-            HStack(spacing: 6) {
-                if let q = song.quality, !q.isEmpty {
-                    Text(q).font(.system(size: 10, weight: .semibold))
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(.white.opacity(0.18)).foregroundColor(.white)
-                        .clipShape(Capsule())
+        ZStack {
+            HStack {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(song.name)
+                        .font(.system(.title3, design: .rounded)).bold().foregroundColor(.white)
+                        .lineLimit(1)
+                    Text(song.singer)
+                        .font(.subheadline).foregroundColor(.white.opacity(0.8)).lineLimit(1)
                 }
-                Text(song.sourceName)
-                    .font(.system(size: 10, weight: .semibold))
-                    .padding(.horizontal, 6).padding(.vertical, 2)
+                Spacer()
+            }
+            .padding(.horizontal, 28)
+            // 中间：音乐品质
+            if let q = song.quality, !q.isEmpty {
+                Text(q).font(.system(size: 11, weight: .semibold))
+                    .padding(.horizontal, 8).padding(.vertical, 3)
                     .background(.white.opacity(0.18)).foregroundColor(.white)
                     .clipShape(Capsule())
             }
         }
-        .padding(.horizontal, 20)
     }
 }
 
@@ -244,19 +243,10 @@ struct FullPlayerView: View {
 
     private var topBar: some View {
         HStack(spacing: 12) {
-            Button { onClose() } label: {
-                Image(systemName: "chevron.down").font(.system(size: 17, weight: .semibold))
-                    .foregroundColor(.white)
-            }
-            .buttonStyle(.plain)
-            Text("LX 音乐").font(.system(.headline, design: .rounded)).bold().foregroundColor(.white)
             Spacer()
             Button { showSearch = true } label: {
-                Image(systemName: "magnifyingglass").font(.system(size: 16, weight: .semibold))
+                Image(systemName: "magnifyingglass").font(.system(size: 17, weight: .medium))
                     .foregroundColor(.white)
-                    .frame(width: 34, height: 34)
-                    .background(.black.opacity(0.3))
-                    .clipShape(Circle())
             }
             .buttonStyle(.plain)
         }
@@ -389,7 +379,7 @@ struct FullPlayerView: View {
             HStack {
                 Text(timeText(player.currentTime)).font(.caption2.monospacedDigit()).foregroundColor(.white.opacity(0.7))
                 Spacer()
-                Text(player.currentSong?.durationText ?? "--:--").font(.caption2.monospacedDigit()).foregroundColor(.white.opacity(0.7))
+                Text(timeText(player.duration)).font(.caption2.monospacedDigit()).foregroundColor(.white.opacity(0.7))
             }
         }
         .padding(.horizontal, 16)

@@ -489,6 +489,7 @@ struct CustomSong: Identifiable, Hashable {
     var singer: String
     var source: String
     var interval: Double?
+    var img: String?          // 服务端 songInfo.img（若该本地歌曾被关联到在线歌，会带在线封面）
     var hasLyric: Bool
 
     init?(json: Any) {
@@ -501,14 +502,15 @@ struct CustomSong: Identifiable, Hashable {
         self.singer = stringValue(deepGet(songInfo, ["singer"])) ?? stringValue(deepGet(d, ["singer"])) ?? "本地音乐"
         self.source = stringValue(deepGet(songInfo, ["source"])) ?? "custom"
         self.interval = doubleValue(deepGet(songInfo, ["interval"])) ?? doubleValue(deepGet(d, ["interval"]))
+        self.img = stringValue(deepGet(songInfo, ["img"])) ?? stringValue(deepGet(d, ["img"]))
         self.hasLyric = (deepGet(d, ["hasLyric"]) as? Bool) ?? false
         self.id = stringValue(deepGet(songInfo, ["songmid"])) ?? stringValue(deepGet(songInfo, ["id"]))
             ?? stringValue(deepGet(d, ["id"])) ?? filename
     }
 
-    /// 转为可播放的 Song（source = "custom"，携带 filename 与封面）
+    /// 转为可播放的 Song（source = "custom"，携带 filename 与封面；优先在线关联封面，其次内嵌封面）
     func asSong(coverURL: String? = nil) -> Song {
         Song(id: id, name: name, singer: singer, source: "custom",
-             albumPic: coverURL, interval: interval, customFilename: filename)
+             albumPic: img ?? coverURL, interval: interval, customFilename: filename)
     }
 }

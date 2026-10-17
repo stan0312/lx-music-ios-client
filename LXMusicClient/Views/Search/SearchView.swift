@@ -175,7 +175,12 @@ struct SearchView: View {
         isLoading = true
         error = nil
         do {
-            results = try await session.api?.search(keyword: keyword, source: source) ?? []
+            if let s = source, !s.isEmpty {
+                results = try await session.api?.search(keyword: keyword, source: s) ?? []
+            } else {
+                // “全部”：多音源并发合并，避免单一音源不可用导致空结果
+                results = try await session.api?.searchAll(keyword: keyword) ?? []
+            }
         } catch {
             self.error = error.localizedDescription
         }

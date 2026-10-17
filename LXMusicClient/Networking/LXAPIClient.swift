@@ -134,6 +134,27 @@ final class LXAPIClient {
         return extractSongs(obj)
     }
 
+    /// 多音源并发搜索并合并去重（“全部”时用，任一音源可用即返回结果）
+    func searchAll(keyword: String, limit: Int = 20) async throws -> [Song] {
+        let sources = ["kw", "kg", "tx", "wy", "mg"]
+        var merged: [Song] = []
+        var seen = Set<String>()
+        await withTaskGroup(of: [Song].self) { group in
+            for s in sources {
+                group.addTask {
+                    (try? await self.search(keyword: keyword, source: s, page: 1, limit: limit)) ?? []
+                }
+            }
+            for await list in group {
+                for song in list where !seen.contains(song.id + "|" + song.source) {
+                    seen.insert(song.id + "|" + song.source)
+                    merged.append(song)
+                }
+            }
+        }
+        return merged
+    }
+
     func tipSearch(keyword: String, source: String = "tx") async throws -> [String] {
         let obj: Any = try await request(try url("/api/music/tipSearch", query: ["name": keyword, "source": source]))
         if let d = obj as? [String: Any] {

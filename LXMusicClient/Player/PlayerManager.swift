@@ -232,8 +232,19 @@ final class PlayerManager: ObservableObject {
                 } else {
                     urlStr = try await api.musicURL(song: song, quality: quality)
                 }
-                guard let url = URL(string: urlStr) else { throw LXError.invalidURL }
-                self.preparePlayer(url: url)
+                // 歌曲缓存：开缓存时若本地已有该歌副本 → 直接播本地文件
+                let playURL: URL
+                if let cached = LocalCache.shared.cachedSongURL(for: song) {
+                    playURL = cached
+                } else {
+                    guard let remote = URL(string: urlStr) else { throw LXError.invalidURL }
+                    playURL = remote
+                    if LocalCache.enableSongCache {
+                        // 后台缓存当前播放流，下次播放同一首直接本地读
+                        LocalCache.shared.cacheAudio(from: remote, for: song)
+                    }
+                }
+                self.preparePlayer(url: playURL)
 
                 // 2. 拉歌词（在线歌传完整 songInfo，自定义歌读内嵌/外部歌词）
                 let lrc: String

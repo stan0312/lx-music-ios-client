@@ -26,10 +26,18 @@ struct RemoteImage: View {
 
     private func load() {
         guard let url else { loading = false; ui = nil; return }
+        // 1. 本地持久缓存命中 → 直接显示，不重复下载
+        let urlString = url.absoluteString
+        if let img = LocalCache.shared.cachedImage(for: urlString) {
+            ui = img; loading = false
+            return
+        }
+        // 2. 系统磁盘缓存
         let req = URLRequest(url: url)
         if let cached = URLCache.shared.cachedResponse(for: req)?.data,
            let img = UIImage(data: cached) {
             ui = img; loading = false
+            LocalCache.shared.saveImage(cached, for: urlString)
             return
         }
         loading = true
@@ -41,6 +49,7 @@ struct RemoteImage: View {
                     if let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode) {
                         URLCache.shared.storeCachedResponse(
                             CachedURLResponse(response: http, data: data), for: req)
+                        LocalCache.shared.saveImage(data, for: urlString)
                     }
                 }
             }

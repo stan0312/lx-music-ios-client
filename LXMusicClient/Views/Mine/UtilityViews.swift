@@ -156,6 +156,7 @@ struct SettingsView: View {
     @EnvironmentObject var session: AppSession
     @EnvironmentObject var player: PlayerManager
     @AppStorage("lx.quality") var quality: String = "128k"
+    @State private var cacheSizeText = LocalCache.shared.sizeText()
 
     private let qualities = ["128k", "320k", "flac", "flac24bit", "master"]
 
@@ -180,6 +181,17 @@ struct SettingsView: View {
                     set: { session.setDark($0) }
                 ))
             }
+            Section("缓存") {
+                Toggle("启用歌曲缓存", isOn: Binding(
+                    get: { LocalCache.enableSongCache },
+                    set: { LocalCache.enableSongCache = $0 }
+                ))
+                LabeledContent("已用缓存", value: cacheSizeText)
+                Button("清除缓存") {
+                    LocalCache.shared.clear()
+                    cacheSizeText = LocalCache.shared.sizeText()
+                }
+            }
             Section("关于") {
                 LabeledContent("客户端", value: "LX 音乐 iOS 客户端")
                 LabeledContent("服务器", value: session.config?.displayHost ?? "-")
@@ -191,6 +203,7 @@ struct SettingsView: View {
                 Button("退出登录", role: .destructive) { session.logout() }
             }
         }
+        .onAppear { cacheSizeText = LocalCache.shared.sizeText() }
         .navigationTitle("设置")
         .navigationBarTitleDisplayMode(.inline)
     }
