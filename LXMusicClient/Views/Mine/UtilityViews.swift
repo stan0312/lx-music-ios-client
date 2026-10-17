@@ -157,6 +157,12 @@ struct SettingsView: View {
     @EnvironmentObject var player: PlayerManager
     @AppStorage("lx.quality") var quality: String = "128k"
     @State private var cacheSizeText = LocalCache.shared.sizeText()
+    @State private var showDiagnosis = false
+    @AppStorage("lx.downloadFileName") private var downloadFileName = "歌名 - 歌手"
+    @AppStorage("lx.downloadWriteLyric") private var downloadWriteLyric = true
+    @State private var downloadSize = DownloadManager.sizeText()
+    @State private var shareItems: [URL] = []
+    @State private var showShare = false
 
     private let qualities = ["128k", "320k", "flac", "flac24bit", "master"]
 
@@ -192,7 +198,18 @@ struct SettingsView: View {
                     cacheSizeText = LocalCache.shared.sizeText()
                 }
             }
+            Section("下载") {
+                TextField("文件名模板", text: $downloadFileName)
+                    .autocorrectionDisabled()
+                Text("用 歌名 / 歌手 作占位，如：歌名 - 歌手。")
+                    .font(.caption).foregroundColor(.secondary)
+                Toggle("同时写入 .lrc 歌词", isOn: $downloadWriteLyric)
+                LabeledContent("已下载", value: downloadSize)
+                Button("打开下载文件夹") { openDownloads() }
+            }
             Section("关于") {
+                Button("在线音源诊断") { showDiagnosis = true }
+                    .foregroundColor(.accentColor)
                 LabeledContent("客户端", value: "LX 音乐 iOS 客户端")
                 LabeledContent("服务器", value: session.config?.displayHost ?? "-")
                 if let p = session.config?.playerPath {
@@ -203,7 +220,12 @@ struct SettingsView: View {
                 Button("退出登录", role: .destructive) { session.logout() }
             }
         }
-        .onAppear { cacheSizeText = LocalCache.shared.sizeText() }
+        .sheet(isPresented: $showDiagnosis) { SourceDiagnosisView() }
+        .sheet(isPresented: $showShare) { ActivityView(items: shareItems) }
+        .onAppear {
+            cacheSizeText = LocalCache.shared.sizeText()
+            downloadSize = DownloadManager.sizeText()
+        }
         .navigationTitle("设置")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -217,6 +239,29 @@ struct SettingsView: View {
         case "master": return "母带"
         default: return q
         }
+    }
+
+    private func openDownloads() {
+        let fm = FileManager.default
+        let files = (try? fm.contentsOfDirectory(at: DownloadManager.downloadsDir,
+                                                 includingPropertiesForKeys: nil,
+                                                 options: [.skipsHiddenFiles])) ?? []
+        if files.isEmpty {
+            if let root = rootViewController() {
+                let alert = UIAlertController(title: "下载文件夹", message: "还没有下载的文件", preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: "好", style: .default))
+                root.present(alert, animated: true)
+            }
+        } else {
+            shareItems = files
+            showShare = true
+        }
+    }
+
+    private func rootViewController() -> UIViewController? {
+        UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.windows.first { $0.isKeyWindow } }
+            .first?.rootViewController
     }
 }
 
@@ -265,4 +310,64 @@ struct LoginPromptView: View {
         }
         .padding(24)
     }
+}
+
+/// 在线音源诊断：逐音源探测服务端在线源是否可用（帮助定位“推荐/搜索/评论为什么空”）
+struct SourceDiagnosisView: View {
+    @EnvironmentObject var session: AppSession
+    @State private var results: [SourceDiagnosis] = []
+    @State private var isLoading = false
+    @State private var note = ""
+    @Environment(\.dismiss) var dismiss
+
+    var body: some View {
+        NavigationView {
+            List {
+                if isLoading {
+                    ProgressView().frame(maxWidth: .infinity).listRowSeparator(.hidden)
+                } else {
+                    ForEach(results, id: \.source) { r in
+                        HStack {
+                            Text(sourceName(r.source)).font(.subheadline.weight(.semibold))
+                            Spacer()
+                            Text(r.detail).font(.caption).foregroundColor(.secondary)
+                            Image(systemName: r.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                .foregroundColor(r.ok ? .green : .red)
+                        }
+                    }
+                    Section {
+                        Text(note).font(.footnote).foregroundColor(.secondary)
+                    }
+                }
+            }
+            .navigationTitle("在线音源诊断")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+        .task { await run() }
+    }
+
+    private func run() async {
+        guard let api = session.api else { note = "未连接服务器"; return }
+        isLoading = true
+        results = await api.diagnoseSources()
+        isLoading = false
+        let okCount = results.filter(\.ok).count
+        note = okCount == 0
+            ? "所有在线音源均不可用——推荐/排行榜/搜索/评论都会是空的。请检查服务器能否访问对应平台（看服务端 debug.txt）。"
+            : "\(okCount)/\(results.count) 个音源可用。可用音源的推荐/搜索/评论可正常使用；自定义目录歌曲没有评论数据。"
+    }
+}
+
+/// UIActivityViewController 包装（分享/打开下载文件）
+struct ActivityView: UIViewControllerRepresentable {
+    var items: [Any]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

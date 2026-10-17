@@ -10,6 +10,7 @@
 		B00000000000000000000001 /* LXMusicClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000001 /* LXMusicClientApp.swift */; };
 		B00000000000000000000002 /* Song.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000002 /* Song.swift */; };
 		B00000000000000000000011 /* LocalCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000013 /* LocalCache.swift */; };
+		B00000000000000000000012 /* DownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000014 /* DownloadManager.swift */; };
 		B00000000000000000000003 /* ServerConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000003 /* ServerConfig.swift */; };
 		B00000000000000000000004 /* LXAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000004 /* LXAPIClient.swift */; };
 		B00000000000000000000005 /* PlayerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000005 /* PlayerManager.swift */; };
@@ -30,6 +31,7 @@
 		F00000000000000000000001 /* LXMusicClientApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LXMusicClientApp.swift; sourceTree = "<group>"; };
 		F00000000000000000000002 /* Song.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Song.swift; sourceTree = "<group>"; };
 		F00000000000000000000013 /* LocalCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalCache.swift; sourceTree = "<group>"; };
+		F00000000000000000000014 /* DownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadManager.swift; sourceTree = "<group>"; };
 		F00000000000000000000003 /* ServerConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerConfig.swift; sourceTree = "<group>"; };
 		F00000000000000000000004 /* LXAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LXAPIClient.swift; sourceTree = "<group>"; };
 		F00000000000000000000005 /* PlayerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerManager.swift; sourceTree = "<group>"; };
@@ -87,6 +89,7 @@
 			children = (
 				F00000000000000000000002 /* Song.swift */,
 				F00000000000000000000013 /* LocalCache.swift */,
+				F00000000000000000000014 /* DownloadManager.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -261,6 +264,7 @@
 				B00000000000000000000001 /* LXMusicClientApp.swift in Sources */,
 				B00000000000000000000002 /* Song.swift in Sources */,
 				B00000000000000000000011 /* LocalCache.swift in Sources */,
+				B00000000000000000000012 /* DownloadManager.swift in Sources */,
 				B00000000000000000000003 /* ServerConfig.swift in Sources */,
 				B00000000000000000000004 /* LXAPIClient.swift in Sources */,
 				B00000000000000000000005 /* PlayerManager.swift in Sources */,

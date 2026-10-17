@@ -363,6 +363,10 @@ struct FullPlayerView: View {
 
             Spacer()
             Menu {
+                Button { downloadCurrentSong() } label: {
+                    Label("下载这首歌曲", systemImage: "arrow.down.circle")
+                }
+                Divider()
                 Button(role: .destructive) { dislikeCurrentSong() } label: {
                     Label("不喜欢 · 不推荐", systemImage: "hand.thumbsdown")
                 }
@@ -397,6 +401,35 @@ struct FullPlayerView: View {
         let t = Int(r)
         if t >= 60 { return "\(t / 60)分" }
         return "\(t)秒"
+    }
+
+    private func downloadCurrentSong() {
+        guard let song = player.currentSong, let api = session.api else { return }
+        showToast("开始下载…")
+        Task {
+            do {
+                let urlStr: String
+                if song.isCustom, let fn = song.customFilename, let user = session.config?.username {
+                    urlStr = try api.customFileURL(filename: fn, user: user).absoluteString
+                } else {
+                    urlStr = try await api.musicURL(song: song, quality: session.quality)
+                }
+                guard let u = URL(string: urlStr) else { throw LXError.invalidURL }
+                var lyric: String? = nil
+                if DownloadManager.writeLyric {
+                    lyric = (try? await api.lyric(song: song)) ?? ""
+                }
+                let r = await DownloadManager.download(song: song, url: u, lyric: lyric)
+                switch r {
+                case .success(let name):
+                    showToast("已下载：\(name)")
+                case .failure(let e):
+                    showToast("下载失败：\(e.localizedDescription)")
+                }
+            } catch {
+                showToast("下载失败：\(error.localizedDescription)")
+            }
+        }
     }
 
     private func dislikeCurrentSong() {

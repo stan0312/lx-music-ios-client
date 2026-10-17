@@ -53,6 +53,13 @@ func extractSongs(_ json: Any) -> [Song] {
 
 // MARK: - 歌曲模型（LX Music 风格）
 
+/// 在线音源诊断结果
+struct SourceDiagnosis: Hashable {
+    let source: String
+    let ok: Bool
+    let detail: String
+}
+
 struct Song: Identifiable, Hashable {
     var id: String
     var name: String

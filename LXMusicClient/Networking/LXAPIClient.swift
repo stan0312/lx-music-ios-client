@@ -228,6 +228,39 @@ final class LXAPIClient {
         return []
     }
 
+    // MARK: - 在线音源诊断
+
+    /// 逐音源探测服务端在线源是否可用（走服务端 /api/music/leaderboard/boards，每个音源 6 秒超时）
+    func diagnoseSources() async -> [SourceDiagnosis] {
+        let sources = ["kw", "kg", "tx", "wy", "mg"]
+        var out: [SourceDiagnosis] = []
+        await withTaskGroup(of: SourceDiagnosis.self) { group in
+            for s in sources {
+                group.addTask { await self.probe(source: s) }
+            }
+            for await d in group { out.append(d) }
+        }
+        return out.sorted { $0.source < $1.source }
+    }
+
+    private func probe(source: String) async -> SourceDiagnosis {
+        guard let u = try? url("/api/music/leaderboard/boards", query: ["source": source]) else {
+            return SourceDiagnosis(source: source, ok: false, detail: "URL 构建失败")
+        }
+        var req = URLRequest(url: u)
+        req.timeoutInterval = 6
+        do {
+            let (_, resp) = try await URLSession.shared.data(for: req)
+            if let http = resp as? HTTPURLResponse {
+                let ok = (200...299).contains(http.statusCode)
+                return SourceDiagnosis(source: source, ok: ok, detail: "HTTP \(http.statusCode)")
+            }
+            return SourceDiagnosis(source: source, ok: false, detail: "无响应")
+        } catch {
+            return SourceDiagnosis(source: source, ok: false, detail: error.localizedDescription)
+        }
+    }
+
     func leaderboardList(platform: String, bangid: String, page: Int = 1) async throws -> [Song] {
         let obj: Any = try await request(try url("/api/music/leaderboard/list",
                                                  query: ["source": platform, "bangid": bangid, "page": "\(page)"]))
