@@ -247,11 +247,7 @@ final class LXAPIClient {
 
     /// 解析播放直链（请求体需包一层 songInfo）
     func musicURL(song: Song, quality: String? = nil) async throws -> String {
-        var songInfo: [String: Any] = [
-            "id": song.id, "name": song.name, "singer": song.singer, "source": song.source,
-        ]
-        if let interval = song.interval { songInfo["interval"] = interval }
-        var body: [String: Any] = ["songInfo": songInfo]
+        var body: [String: Any] = ["songInfo": song.songInfoPayload()]
         if let q = quality, !q.isEmpty { body["quality"] = q }
 
         let obj: Any = try await request(try url("/api/music/url"), method: "POST", body: body)
@@ -265,10 +261,7 @@ final class LXAPIClient {
     }
 
     func lyric(song: Song) async throws -> String {
-        let songInfo: [String: Any] = [
-            "id": song.id, "name": song.name, "singer": song.singer, "source": song.source,
-        ]
-        let body: [String: Any] = ["songInfo": songInfo]
+        let body: [String: Any] = ["songInfo": song.songInfoPayload()]
         let obj: Any = try await request(try url("/api/music/lyric"), method: "POST", body: body)
         if let s = obj as? String, !s.isEmpty { return s }
         if let d = obj as? [String: Any] {
@@ -280,12 +273,7 @@ final class LXAPIClient {
     }
 
     func comment(song: Song, type: String = "hot", page: Int = 1, limit: Int = 20) async throws -> [SongComment] {
-        var songInfo: [String: Any] = [
-            "id": song.id, "name": song.name, "singer": song.singer, "source": song.source,
-            "songmid": song.id,
-        ]
-        if let interval = song.interval { songInfo["interval"] = interval }
-        let body: [String: Any] = ["songInfo": songInfo, "type": type, "page": page, "limit": limit]
+        let body: [String: Any] = ["songInfo": song.songInfoPayload(), "type": type, "page": page, "limit": limit]
         let obj: Any = try await request(try url("/api/music/comment"), method: "POST", body: body)
         if let d = obj as? [String: Any] {
             for key in ["comments", "list", "data"] {
@@ -407,10 +395,7 @@ final class LXAPIClient {
     }
 
     func cacheDownload(song: Song, streamURL: String, quality: String? = nil) async throws {
-        let songInfo: [String: Any] = [
-            "id": song.id, "name": song.name, "singer": song.singer, "source": song.source,
-        ]
-        var body: [String: Any] = ["songInfo": songInfo, "url": streamURL]
+        var body: [String: Any] = ["songInfo": song.songInfoPayload(), "url": streamURL]
         if let q = quality, !q.isEmpty { body["quality"] = q }
         _ = try await request(try url("/api/music/cache/download"), method: "POST", body: body)
     }

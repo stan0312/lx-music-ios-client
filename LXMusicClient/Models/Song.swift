@@ -66,6 +66,11 @@ struct Song: Identifiable, Hashable {
     var lrc: String?
     var url: String?        // 已解析直链
     var customFilename: String? // 自定义目录歌曲的相对路径（source == "custom" 时使用）
+    // 各平台真实 ID（评论/播放/歌词需要完整 songInfo 才能命中）
+    var songmid: String?
+    var hash: String?
+    var mid: String?
+    var albumId: String?
 
     /// 是否为“自定义目录”歌曲（由本地服务器目录提供音频）
     var isCustom: Bool { source == "custom" }
@@ -75,13 +80,16 @@ struct Song: Identifiable, Hashable {
         albumName: String? = nil, albumPic: String? = nil,
         interval: Double? = nil, quality: String? = nil,
         size: String? = nil, lrc: String? = nil, url: String? = nil,
-        customFilename: String? = nil
+        customFilename: String? = nil,
+        songmid: String? = nil, hash: String? = nil,
+        mid: String? = nil, albumId: String? = nil
     ) {
         self.id = id; self.name = name; self.singer = singer
         self.source = source; self.albumName = albumName; self.albumPic = albumPic
         self.interval = interval; self.quality = quality
         self.size = size; self.lrc = lrc; self.url = url
         self.customFilename = customFilename
+        self.songmid = songmid; self.hash = hash; self.mid = mid; self.albumId = albumId
     }
 
     /// 容错解析
@@ -90,9 +98,13 @@ struct Song: Identifiable, Hashable {
         guard let rawName = stringValue(deepGet(d, ["name"])), !rawName.isEmpty else { return nil }
 
         var sid = stringValue(deepGet(d, ["id"]))
-        // lxserver 榜单/歌单详情常用 songmid/songId 作为标识，需兜底
+        // lxserver 榜单/歌单/搜索常用多种 ID，需逐个兜底
         if sid == nil { sid = stringValue(deepGet(d, ["songmid"])) }
         if sid == nil { sid = stringValue(deepGet(d, ["songId"])) }
+        if sid == nil { sid = stringValue(deepGet(d, ["mid"])) }
+        if sid == nil { sid = stringValue(deepGet(d, ["hash"])) }
+        if sid == nil { sid = stringValue(deepGet(d, ["copyrightId"])) }
+        if sid == nil { sid = stringValue(deepGet(d, ["strMediaMid"])) }
         // id 可能是数组（多 id 优先第一个）
         if sid == nil, let arr = arrayValue(d["id"]) {
             sid = arr.first.flatMap(stringValue)
@@ -116,6 +128,32 @@ struct Song: Identifiable, Hashable {
         self.lrc = stringValue(deepGet(d, ["lrc"]))
         self.url = stringValue(deepGet(d, ["url"]))
         self.customFilename = stringValue(deepGet(d, ["customFilename"]))
+        self.songmid = stringValue(deepGet(d, ["songmid"]))
+        self.hash = stringValue(deepGet(d, ["hash"]))
+        self.mid = stringValue(deepGet(d, ["mid"])) ?? stringValue(deepGet(d, ["strMediaMid"]))
+        self.albumId = stringValue(deepGet(d, ["albumId"])) ?? stringValue(deepGet(d, ["album_id"]))
+    }
+
+    /// 发送给 lxserver 的完整 songInfo（评论/播放/歌词需要全字段才能命中）
+    func songInfoPayload() -> [String: Any] {
+        var d: [String: Any] = ["id": id, "name": name, "singer": singer, "source": source]
+        if let m = songmid { d["songmid"] = m }
+        if let h = hash { d["hash"] = h }
+        if let md = mid { d["mid"] = md }
+        if let aid = albumId { d["albumId"] = aid }
+        if let iv = interval { d["interval"] = iv }
+        if let an = albumName { d["albumName"] = an }
+        if let pic = albumPic { d["img"] = pic }
+        // meta：服务端 normalizeSongInfo 会从 meta 反推 hash/strMediaMid/albumMid 等 SDK 必需字段
+        var meta: [String: Any] = [:]
+        if let h = hash { meta["hash"] = h }
+        if let md = mid { meta["strMediaMid"] = md }
+        if let sid = songmid { meta["songId"] = sid }
+        if let aid = albumId { meta["albumId"] = aid }
+        if let iv = interval { meta["interval"] = iv }
+        if let pic = albumPic { meta["picUrl"] = pic }
+        d["meta"] = meta
+        return d
     }
 
     /// 持久化用
@@ -128,6 +166,10 @@ struct Song: Identifiable, Hashable {
         if let interval { d["interval"] = interval }
         if let quality { d["quality"] = quality }
         if let customFilename { d["customFilename"] = customFilename }
+        if let songmid { d["songmid"] = songmid }
+        if let hash { d["hash"] = hash }
+        if let mid { d["mid"] = mid }
+        if let albumId { d["albumId"] = albumId }
         return d
     }
 

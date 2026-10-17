@@ -217,7 +217,6 @@ final class PlayerManager: ObservableObject {
         lyricTask?.cancel()
 
         let api = self.api
-        let sid = song.id
         let quality = self.quality
         let username = self.username
         let isCustom = song.isCustom
@@ -236,14 +235,12 @@ final class PlayerManager: ObservableObject {
                 guard let url = URL(string: urlStr) else { throw LXError.invalidURL }
                 self.preparePlayer(url: url)
 
-                // 2. 拉歌词
+                // 2. 拉歌词（在线歌传完整 songInfo，自定义歌读内嵌/外部歌词）
                 let lrc: String
                 if isCustom, let fn = customFilename, let user = username {
                     lrc = (try? await api.customLyric(filename: fn, user: user)) ?? ""
                 } else {
-                    lrc = try await api.lyric(song: Song(
-                        id: sid, name: song.name, singer: song.singer, source: song.source,
-                        albumPic: song.albumPic))
+                    lrc = try await api.lyric(song: song)
                 }
                 if lrc.isEmpty { self.lyrics = []; return }
                 self.lyrics = LyricLine.parse(lrc: lrc)

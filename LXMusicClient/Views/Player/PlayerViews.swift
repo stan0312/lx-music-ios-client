@@ -411,7 +411,6 @@ struct FullPlayerView: View {
         }
         .padding(.horizontal, 34)
         .padding(.vertical, 2)
-        .background(GlassBackground())
     }
 
     private func tabButton(index: Int, title: String, icon: String) -> some View {
